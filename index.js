@@ -83,9 +83,7 @@ export class BaseM {
           if (!structure.has(part)) {
             const newStructure = new Map();
             const newProxy = {};
-            newStructure.parent = structure;
             newStructure.proxy = newProxy;
-            newStructure.path = partial;
             structure.set(part, newStructure);
             Object.defineProperty(proxy, part, {
               get() {
@@ -94,7 +92,6 @@ export class BaseM {
                 return proxyInstance;
               },
               set(value) {
-                // TODO validate
                 if (M.options.allowSettingThrough)
                   this[symbols.proxySelf].m.deepSetWithParents(`${partial}.${part}`, value);
                 else
@@ -106,6 +103,7 @@ export class BaseM {
             structure = newStructure;
           } else {
             structure = structure.get(part);
+            // this is the only thing the structure shebang is for
             proxy = structure.proxy;
           }
           partial = `${partial}.${part}`;
@@ -115,11 +113,22 @@ export class BaseM {
             return this[symbols.proxySelf].m.deepGet(`${partial}.${tail}`);
           },
           set(value) {
-            // TODO validate
             if (M.options.allowSettingThrough)
               this[symbols.proxySelf].m.deepSetWithParents(`${partial}.${tail}`, value);
             else
               this[symbols.proxySelf].m.deepSet(`${partial}.${tail}`, value);
+          },
+        });
+      } else {
+        Object.defineProperty(this.subjectClass.prototype, head, {
+          get() {
+            return this.m.deepGet(path);
+          },
+          set(value) {
+            if (M.options.allowSettingThrough)
+              this.m.deepSetWithParents(path, value);
+            else
+              this.m.deepSet(path, value);
           },
         });
       }
@@ -285,6 +294,7 @@ export class BaseM {
   }
 
   deepSet(path, value) {
+    // TODO validate
     const [parent, current, lastIdentifier] = this._deepGetMinusOne(path);
     if (current !== undefined && current.set) current.set(value);
     else if (parent.deepSet) parent.deepSet(lastIdentifier, value);
