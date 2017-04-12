@@ -1,0 +1,19 @@
+{
+  "name": "marikosama",
+  "version": "0.0.1",
+  "description": "A model system for db-centric webapps",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "model",
+    "mvc",
+    "webapp"
+  ],
+  "author": "Lalo Martins <lalo.martins@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "mongoose": "^4.9.4"
+  }
+}
