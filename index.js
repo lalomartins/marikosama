@@ -11,6 +11,7 @@ export class Model {
   static options = {
     createEmptySubDocs: false,
     initialize: true,
+    validateOnCreation: true,
   }
 
   constructor(data) {
@@ -25,11 +26,12 @@ export class Model {
     const Class = this.constructor;
     this.data = {...data};
     for (const [key, SDClass] of Class.subDocClasses) {
-      console.debug(`checking for ${key}:`, SDClass, data[key]);
       if (data[key] !== undefined || Class.options.createEmptySubDocs) {
         this.data[key] = new SDClass(data[key]);
       }
     }
+    if (Class.options.validateOnCreation && data !== undefined)
+      this.validateSync({throw: true});
   }
 
   static createSubDocClasses() {
@@ -65,6 +67,8 @@ export class Model {
         const schemaPath = schema.paths[name];
         const item = this.deepGet(name);
         let error;
+        // TODO: the path itself may have validations, this is especially useful
+        // (and used?) with arrays.
         if (item && item.validateSync)
           error = item.validateSync(options);
         else
@@ -163,9 +167,11 @@ export class ArrayModel extends Model {
       for (const [index, item] of this.data.entries()) {
         console.debug(`validating item ${index}:`, item);
         const error = item.validateSync(options);
-        if (options.collect) errors.push([index, error]);
-        else if (options.throw) throw error;
-        else return error;
+        if (error) {
+          if (options.collect) errors.push([index, error]);
+          else if (options.throw) throw error;
+          else return error;
+        }
       }
       if (errors.length) {
         const collected = new CompoundValidationError(errors);
