@@ -1,10 +1,13 @@
-// import './fills';
 import Schema from 'mongoose/lib/schema';
 export {Schema};
 
 import {CompoundValidationError, makeDeepGetError} from './errors';
 
+export const modelData = Symbol(`modelData`);
 export const initialize = Symbol(`initialize`);
+export const nestedProxies = Symbol(`nestedProxies`);
+export const proxySelf = Symbol(`proxySelf`);
+export const proxyStructure = Symbol(`proxyStructure`);
 
 
 export class Model {
@@ -12,22 +15,65 @@ export class Model {
     createEmptySubDocs: false,
     initialize: true,
     validateOnCreation: true,
+    accessors: true,
   }
 
   constructor(data) {
     const Class = this.constructor;
     if (!Class.hasOwnProperty(`subDocClasses`))
       Class.createSubDocClasses();
+    if (Class.options.accessors && !Class.hasOwnProperty(nestedProxies)) {
+      const proxies = Class[nestedProxies] = new Map();
+      Class.schema.eachPath((path, schemaPath) => {
+        const parts = path.split(`.`);
+        if (Class.prototype[parts[0]] !== undefined) return;
+        if (parts.length > 1) {
+          const head = parts.shift();
+          // does the last one have to be different?
+          // const tail = parts.pop();
+          if (!proxies.has(head))
+            proxies.set(head, {
+              [proxyStructure]: new Map(),
+            });
+          let proxy = proxies.get(head);
+          let partial = head;
+          let structure = proxy[proxyStructure];
+          for (const part of parts) {
+            if (!structure.has(part)) {
+              const newStructure = new Map();
+              const newProxy = {};
+              newStructure.parent = structure;
+              newStructure.proxy = newProxy;
+              structure.path = partial;
+              structure.set(part, newStructure);
+              Object.defineProperty(proxy, part, {
+                get() {
+                  debugger;
+                  return newProxy;
+                },
+                set(value) {
+
+                },
+              });
+              proxy = newProxy;
+              structure = newStructure;
+            }
+            partial = `${partial}.${part}`;
+            // proxy = ???
+          }
+        }
+      });
+    }
     if (Class.options.initialize)
       this[initialize](data);
   }
 
   [initialize](data) {
     const Class = this.constructor;
-    this.data = {...data};
+    this[modelData] = {...data};
     for (const [key, SDClass] of Class.subDocClasses) {
       if (data[key] !== undefined || Class.options.createEmptySubDocs) {
-        this.data[key] = new SDClass(data[key]);
+        this[modelData][key] = new SDClass(data[key]);
       }
     }
     if (Class.options.validateOnCreation && data !== undefined)
@@ -63,9 +109,15 @@ export class Model {
     if (schema) {
       const errors = [];
       // not schema.eachPath() so that we can return partway
-      for (const name of Object.getOwnPropertyNames(schema.paths)) {
-        const schemaPath = schema.paths[name];
-        const item = this.deepGet(name);
+      for (const path of Object.getOwnPropertyNames(schema.paths)) {
+        const schemaPath = schema.paths[path];
+        let item;
+        try {
+          item = this.deepGet(path);
+        } catch (error) {
+          if (error.fullPath === path) item = undefined;
+          else throw error;
+        }
         let error;
         // TODO: the path itself may have validations, this is especially useful
         // (and used?) with arrays.
@@ -74,7 +126,7 @@ export class Model {
         else
           error = schemaPath.doValidateSync(item);
         if (error) {
-          if (options.collect) errors.push([name, error]);
+          if (options.collect) errors.push([path, error]);
           else if (options.throw) throw error;
           else return error;
         }
@@ -106,12 +158,18 @@ export class Model {
   }
 
   _deepGetMinusOne(path, parent) {
-    if (typeof path !== `string`) return this.data[path];
+    if (typeof path !== `string`) return this[modelData][path];
     const re = /(?:\.?([a-zA-Z_$][\w$]*))|(?:\[([^\]]+)\])/gy;
-    let partial = this.data;
+    let partial = this[modelData];
     let previousIndex = 0;
     let lastId;
     while (re.lastIndex < path.length) {
+      if (partial === undefined) {
+        const error = new TypeError(`Cannot read path ${path.substr(re.lastIndex)} of undefined ${path.substr(0, re.lastIndex)}`);
+        error.fullPath = path;
+        error.lastValid = path.substr(0, re.lastIndex);
+        throw error;
+      }
       parent = partial;
       previousIndex = re.lastIndex; // for the error message
       const match = re.exec(path);
@@ -157,14 +215,14 @@ export class Model {
 
 export class ArrayModel extends Model {
   [initialize](data = []) {
-    this.data = data.map((item) => new this.constructor.docClass(item));
+    this[modelData] = data.map((item) => new this.constructor.docClass(item));
   }
 
   validateSync(options = {}) {
     const {schema} = this.constructor;
     if (schema) {
       const errors = [];
-      for (const [index, item] of this.data.entries()) {
+      for (const [index, item] of this[modelData].entries()) {
         console.debug(`validating item ${index}:`, item);
         const error = item.validateSync(options);
         if (error) {
@@ -181,13 +239,13 @@ export class ArrayModel extends Model {
     }
   }
 
-  get length() {return this.data.length}
-  [Symbol.iterator]() {return this.data[Symbol.interator]()}
+  get length() {return this[modelData].length}
+  [Symbol.iterator]() {return this[modelData][Symbol.interator]()}
 
   // TODO Array methods push, pop, slice, etc
 
   _deepGetMinusOne(path) {
-    if (typeof path === `number`) return this.data[path];
+    if (typeof path === `number`) return this[modelData][path];
     if (typeof path !== `string`) return undefined; // or throw?
     const re = /^\[?(\d+)\]?/y;
     const match = re.exec(path);
@@ -198,7 +256,7 @@ export class ArrayModel extends Model {
     } catch (e) {
       throw makeDeepGetError(path, match[1]);
     }
-    const doc = this.data[index];
+    const doc = this[modelData][index];
     if (doc && doc._deepGetMinusOne && re.lastIndex < path.length)
       try {
         return doc._deepGetMinusOne(path.substr(re.lastIndex));
