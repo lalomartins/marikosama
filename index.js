@@ -1,8 +1,8 @@
-import './fills';
+// import './fills';
 import Schema from 'mongoose/lib/schema';
 export {Schema};
 
-import {CompoundValidationError} from './errors';
+import {CompoundValidationError, makeDeepGetError} from './errors';
 
 export const initialize = Symbol(`initialize`);
 
@@ -84,8 +84,37 @@ export class Model {
   }
 
   deepGet(path) {
-    // TODO
-    return this.data[path];
+    if (typeof path !== `string`) return this.data[path];
+    const re = /(?:\.?([a-zA-Z_$][\w$]*))|(?:\[([^\]]+)\])/gy;
+    let partial = this.data;
+    while (re.lastIndex < path.length) {
+      const previousIndex = re.lastIndex; // for the error message
+      const match = re.exec(path);
+      if (!match) throw makeDeepGetError(path, path.substr(previousIndex));
+      const [text, attr, index] = match;
+      if (attr !== undefined) {
+        partial = partial[attr];
+      } else if (index !== undefined) {
+        let parsedIndex;
+        try {
+          parsedIndex = JSON.parse(index);
+        } catch (e) {
+          throw makeDeepGetError(path, index);
+        }
+        partial = partial[parsedIndex];
+      } else {
+        // not sure how this would happen but…
+        throw makeDeepGetError(path, text);
+      }
+
+      if (partial && partial.deepGet && re.lastIndex < path.length)
+        try {
+          return partial.deepGet(path.substr(re.lastIndex));
+        } catch (e) {
+          throw makeDeepGetError(path, e);
+        }
+    }
+    return partial;
   }
 }
 
@@ -115,5 +144,26 @@ export class ArrayModel extends Model {
 
   get length() {return this.data.length}
   [Symbol.iterator]() {return this.data[Symbol.interator]()}
-  // TODO deepGet
+
+  deepGet(path) {
+    if (typeof path === `number`) return this.data[path];
+    if (typeof path !== `string`) return undefined; // or throw?
+    const re = /^\[?(\d+)\]?/y;
+    const match = re.exec(path);
+    if (!match) throw makeDeepGetError(path);
+    let index;
+    try {
+      index = JSON.parse(match[1]);
+    } catch (e) {
+      throw makeDeepGetError(path, match[1]);
+    }
+    const doc = this.data[index];
+    if (doc && doc.deepGet && re.lastIndex < path.length)
+      try {
+        return doc.deepGet(path.substr(re.lastIndex));
+      } catch (e) {
+        throw makeDeepGetError(path, e);
+      }
+    return doc;
+  }
 }
