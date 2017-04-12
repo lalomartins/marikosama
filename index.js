@@ -3,16 +3,16 @@ export {Schema};
 
 import {CompoundValidationError, makeDeepGetError} from './errors';
 
-export const modelData = Symbol(`modelData`);
-export const initialize = Symbol(`initialize`);
-export const nestedProxies = Symbol(`nestedProxies`);
-export const proxySelf = Symbol(`proxySelf`);
-export const proxyStructure = Symbol(`proxyStructure`);
+export const symbols = {
+  modelData: Symbol(`modelData`),
+  nestedProxies: Symbol(`nestedProxies`),
+  proxySelf: Symbol(`proxySelf`),
+  proxyStructure: Symbol(`proxyStructure`),
+};
 
 
 export function model({schema, persistence, logic, options}) {
   return function(Class) {
-    console.debug(Class);
     class M extends BaseM {
       static schema = schema;
       static persistence = persistence;
@@ -36,62 +36,101 @@ export function model({schema, persistence, logic, options}) {
 export class BaseM {
   constructor(subject) {
     this.subject = subject;
+    if (this.constructor.options.accessors) {
+      this[symbols.modelData] = {};
+    }
   }
 
   static initClass(options) {
     this.options = {
-      initialize: true,
+      initialize: false,
       validateOnCreation: true,
       accessors: true,
+      allowSettingThrough: false,
       ...options,
     };
-    // if (this.options.accessors) {
-    //   const proxies = Class[nestedProxies] = new Map();
-    //   Class.schema.eachPath((path, schemaPath) => {
-    //     const parts = path.split(`.`);
-    //     if (Class.prototype[parts[0]] !== undefined) return;
-    //     if (parts.length > 1) {
-    //       const head = parts.shift();
-    //       // does the last one have to be different?
-    //       // const tail = parts.pop();
-    //       if (!proxies.has(head))
-    //         proxies.set(head, {
-    //           [proxyStructure]: new Map(),
-    //         });
-    //       let proxy = proxies.get(head);
-    //       let partial = head;
-    //       let structure = proxy[proxyStructure];
-    //       for (const part of parts) {
-    //         if (!structure.has(part)) {
-    //           const newStructure = new Map();
-    //           const newProxy = {};
-    //           newStructure.parent = structure;
-    //           newStructure.proxy = newProxy;
-    //           structure.path = partial;
-    //           structure.set(part, newStructure);
-    //           Object.defineProperty(proxy, part, {
-    //             get() {
-    //               debugger;
-    //               return newProxy;
-    //             },
-    //             set(value) {
-    //
-    //             },
-    //           });
-    //           proxy = newProxy;
-    //           structure = newStructure;
-    //         }
-    //         partial = `${partial}.${part}`;
-    //         // proxy = ???
-    //       }
-    //     }
-    //   });
-    // }
+    if (this.options.accessors) {
+      this.createAccessors();
+    }
+  }
+
+  static createAccessors() {
+    const M = this;
+    const proxies = this[symbols.nestedProxies] = new Map();
+    this.schema.eachPath((path, schemaPath) => {
+      const parts = path.split(`.`);
+      const head = parts.shift();
+      if (this.subjectClass.prototype[head] !== undefined && !proxies.has(head)) return;
+      if (parts.length) {
+        const tail = parts.pop();
+        if (!proxies.has(head)) {
+          const proxy = {
+            [symbols.proxyStructure]: new Map(),
+          };
+          proxies.set(head, proxy);
+          Object.defineProperty(this.subjectClass.prototype, head, {
+            get() {
+              const proxyInstance = Object.create(proxy);
+              proxyInstance[symbols.proxySelf] = this;
+              return proxyInstance;
+            },
+          });
+        }
+        let proxy = proxies.get(head);
+        let partial = head;
+        let structure = proxy[symbols.proxyStructure];
+        for (const part of parts) {
+          if (!structure.has(part)) {
+            const newStructure = new Map();
+            const newProxy = {};
+            newStructure.parent = structure;
+            newStructure.proxy = newProxy;
+            newStructure.path = partial;
+            structure.set(part, newStructure);
+            Object.defineProperty(proxy, part, {
+              get() {
+                const proxyInstance = Object.create(newProxy);
+                proxyInstance[symbols.proxySelf] = this[symbols.proxySelf];
+                return proxyInstance;
+              },
+              set(value) {
+                // TODO validate
+                if (M.options.allowSettingThrough)
+                  this[symbols.proxySelf].m.deepSetWithParents(`${partial}.${part}`, value);
+                else
+                  this[symbols.proxySelf].m.deepSet(`${partial}.${part}`, value);
+              },
+              configurable: false,
+            });
+            proxy = newProxy;
+            structure = newStructure;
+          } else {
+            structure = structure.get(part);
+            proxy = structure.proxy;
+          }
+          partial = `${partial}.${part}`;
+        }
+        Object.defineProperty(proxy, tail, {
+          get() {
+            return this[symbols.proxySelf].m.deepGet(`${partial}.${tail}`);
+          },
+          set(value) {
+            // TODO validate
+            if (M.options.allowSettingThrough)
+              this[symbols.proxySelf].m.deepSetWithParents(`${partial}.${tail}`, value);
+            else
+              this[symbols.proxySelf].m.deepSet(`${partial}.${tail}`, value);
+          },
+        });
+      }
+    });
   }
 
   static load(data) {
     const instance = new this.subjectClass();
     instance.m.set(data);
+    if (instance.m.initialize && this.options.initialize)
+      instance.m.initialize();
     return instance;
   }
 
@@ -182,8 +221,8 @@ export class BaseM {
 
   _deepGetMinusOne(path, parent) {
     if (parent === undefined) {
-      if (this.constructor.options.acessors) {
-        parent = this[modelData] = {};
+      if (this.constructor.options.accessors) {
+        parent = this[symbols.modelData];
       } else {
         parent = this.subject;
       }
@@ -246,13 +285,7 @@ export class BaseM {
   }
 
   deepSet(path, value) {
-    let container;
-    if (this.constructor.options.acessors) {
-      container = this[modelData] = {};
-    } else {
-      container = this.subject;
-    }
-    const [parent, current, lastIdentifier] = this._deepGetMinusOne(path, container);
+    const [parent, current, lastIdentifier] = this._deepGetMinusOne(path);
     if (current !== undefined && current.set) current.set(value);
     else if (parent.deepSet) parent.deepSet(lastIdentifier, value);
     else if (typeof lastIdentifier === `string`) parent[lastIdentifier] = value;
@@ -276,14 +309,14 @@ export class BaseM {
 
 // export class ArrayModel extends Model {
 //   [initialize](data = []) {
-//     this[modelData] = data.map((item) => new this.constructor.docClass(item));
+//     this[symbols.modelData] = data.map((item) => new this.constructor.docClass(item));
 //   }
 //
 //   validateSync(options = {}) {
 //     const {schema} = this.constructor;
 //     if (schema) {
 //       const errors = [];
-//       for (const [index, item] of this[modelData].entries()) {
+//       for (const [index, item] of this[symbols.modelData].entries()) {
 //         console.debug(`validating item ${index}:`, item);
 //         const error = item.validateSync(options);
 //         if (error) {
@@ -300,13 +333,13 @@ export class BaseM {
 //     }
 //   }
 //
-//   get length() {return this[modelData].length}
-//   [Symbol.iterator]() {return this[modelData][Symbol.interator]()}
+//   get length() {return this[symbols.modelData].length}
+//   [Symbol.iterator]() {return this[symbols.modelData][Symbol.interator]()}
 //
 //   // TODO Array methods push, pop, slice, etc
 //
 //   _deepGetMinusOne(path) {
-//     if (typeof path === `number`) return this[modelData][path];
+//     if (typeof path === `number`) return this[symbols.modelData][path];
 //     if (typeof path !== `string`) return undefined; // or throw?
 //     const re = /^\[?(\d+)\]?/y;
 //     const match = re.exec(path);
@@ -317,7 +350,7 @@ export class BaseM {
 //     } catch (e) {
 //       throw makeDeepGetError(path, match[1]);
 //     }
-//     const doc = this[modelData][index];
+//     const doc = this[symbols.modelData][index];
 //     if (doc && doc._deepGetMinusOne && re.lastIndex < path.length)
 //       try {
 //         return doc._deepGetMinusOne(path.substr(re.lastIndex));
