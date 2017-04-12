@@ -83,6 +83,24 @@ export class Model {
     }
   }
 
+  validate(options = {}, callback) {
+    // We don't really support async validators yet; not a high priority for now.
+    // We're providing this method just to have a compatible-ish API.
+    if (typeof option === `function`) {
+      callback = options;
+      options = {};
+    }
+    if (callback) {
+      this.validate(options).then(callback, callback);
+      return;
+    }
+    return new Promise((resolve, reject) => {
+      const error = this.validateSync({...options, throw: false});
+      if (error) reject(error);
+      else resolve();
+    });
+  }
+
   _deepGetMinusOne(path, parent) {
     if (typeof path !== `string`) return this.data[path];
     const re = /(?:\.?([a-zA-Z_$][\w$]*))|(?:\[([^\]]+)\])/gy;
