@@ -10,74 +10,107 @@ export const proxySelf = Symbol(`proxySelf`);
 export const proxyStructure = Symbol(`proxyStructure`);
 
 
-export class Model {
-  static options = {
-    createEmptySubDocs: false,
-    initialize: true,
-    validateOnCreation: true,
-    accessors: true,
-  }
-
-  constructor(data) {
-    const Class = this.constructor;
-    if (!Class.hasOwnProperty(`subDocClasses`))
-      Class.createSubDocClasses();
-    if (Class.options.accessors && !Class.hasOwnProperty(nestedProxies)) {
-      const proxies = Class[nestedProxies] = new Map();
-      Class.schema.eachPath((path, schemaPath) => {
-        const parts = path.split(`.`);
-        if (Class.prototype[parts[0]] !== undefined) return;
-        if (parts.length > 1) {
-          const head = parts.shift();
-          // does the last one have to be different?
-          // const tail = parts.pop();
-          if (!proxies.has(head))
-            proxies.set(head, {
-              [proxyStructure]: new Map(),
-            });
-          let proxy = proxies.get(head);
-          let partial = head;
-          let structure = proxy[proxyStructure];
-          for (const part of parts) {
-            if (!structure.has(part)) {
-              const newStructure = new Map();
-              const newProxy = {};
-              newStructure.parent = structure;
-              newStructure.proxy = newProxy;
-              structure.path = partial;
-              structure.set(part, newStructure);
-              Object.defineProperty(proxy, part, {
-                get() {
-                  debugger;
-                  return newProxy;
-                },
-                set(value) {
-
-                },
-              });
-              proxy = newProxy;
-              structure = newStructure;
-            }
-            partial = `${partial}.${part}`;
-            // proxy = ???
-          }
-        }
-      });
+export function model({schema, persistence, logic, options}) {
+  return function(Class) {
+    console.debug(Class);
+    class M extends BaseM {
+      static schema = schema;
+      static persistence = persistence;
+      static subjectClass = Class;
     }
-    if (Class.options.initialize)
-      this[initialize](data);
+    Object.assign(M.prototype, logic);
+    M.initClass(options);
+    Class.M = M;
+    Object.defineProperty(Class.prototype, `m`, {
+      get() {
+        Object.defineProperty(this, `m`, {
+          value: new this.constructor.M(this),
+          __proto__: null,
+        });
+        return this.m;
+      },
+    });
+  };
+}
+
+export class BaseM {
+  constructor(subject) {
+    this.subject = subject;
   }
 
-  [initialize](data) {
-    const Class = this.constructor;
-    this[modelData] = {...data};
-    for (const [key, SDClass] of Class.subDocClasses) {
-      if (data[key] !== undefined || Class.options.createEmptySubDocs) {
-        this[modelData][key] = new SDClass(data[key]);
+  static initClass(options) {
+    this.options = {
+      createEmptySubDocs: false,
+      initialize: true,
+      validateOnCreation: true,
+      accessors: true,
+      ...options,
+    };
+    this.createSubDocClasses();
+    // if (this.options.accessors) {
+    //   const proxies = Class[nestedProxies] = new Map();
+    //   Class.schema.eachPath((path, schemaPath) => {
+    //     const parts = path.split(`.`);
+    //     if (Class.prototype[parts[0]] !== undefined) return;
+    //     if (parts.length > 1) {
+    //       const head = parts.shift();
+    //       // does the last one have to be different?
+    //       // const tail = parts.pop();
+    //       if (!proxies.has(head))
+    //         proxies.set(head, {
+    //           [proxyStructure]: new Map(),
+    //         });
+    //       let proxy = proxies.get(head);
+    //       let partial = head;
+    //       let structure = proxy[proxyStructure];
+    //       for (const part of parts) {
+    //         if (!structure.has(part)) {
+    //           const newStructure = new Map();
+    //           const newProxy = {};
+    //           newStructure.parent = structure;
+    //           newStructure.proxy = newProxy;
+    //           structure.path = partial;
+    //           structure.set(part, newStructure);
+    //           Object.defineProperty(proxy, part, {
+    //             get() {
+    //               debugger;
+    //               return newProxy;
+    //             },
+    //             set(value) {
+    //
+    //             },
+    //           });
+    //           proxy = newProxy;
+    //           structure = newStructure;
+    //         }
+    //         partial = `${partial}.${part}`;
+    //         // proxy = ???
+    //       }
+    //     }
+    //   });
+    // }
+  }
+
+  static load(data) {
+    const instance = new this.subjectClass();
+    instance.m.set(data);
+    return instance;
+  }
+
+  set(data) {
+    const M = this.constructor;
+    M.schema.eachPath((path, schemaPath) => {
+      const value = this.deepGetMaybe(path, data);
+      const SDClass = M.subDocClasses.get(path);
+      if (SDClass && (value !== undefined || M.options.createEmptySubDocs)) {
+        this.deepSetWithParents(path, new SDClass(value));
+      } else if (value !== undefined) {
+        this.deepSetWithParents(path, value);
       }
-    }
-    if (Class.options.validateOnCreation && data !== undefined)
+    });
+    if (M.options.validateOnCreation && data !== undefined)
       this.validateSync({throw: true});
+    return this;
   }
 
   static createSubDocClasses() {
@@ -111,13 +144,7 @@ export class Model {
       // not schema.eachPath() so that we can return partway
       for (const path of Object.getOwnPropertyNames(schema.paths)) {
         const schemaPath = schema.paths[path];
-        let item;
-        try {
-          item = this.deepGet(path);
-        } catch (error) {
-          if (error.fullPath === path) item = undefined;
-          else throw error;
-        }
+        const item = this.deepGetMaybe(path);
         let error;
         // TODO: the path itself may have validations, this is especially useful
         // (and used?) with arrays.
@@ -158,23 +185,32 @@ export class Model {
   }
 
   _deepGetMinusOne(path, parent) {
-    if (typeof path !== `string`) return this[modelData][path];
+    if (parent === undefined) {
+      if (this.constructor.options.acessors) {
+        parent = this[modelData] = {};
+      } else {
+        parent = this.subject;
+      }
+    }
+    if (typeof path !== `string`) return parent[path];
     const re = /(?:\.?([a-zA-Z_$][\w$]*))|(?:\[([^\]]+)\])/gy;
-    let partial = this[modelData];
+    let partial = parent;
     let previousIndex = 0;
     let lastId;
     while (re.lastIndex < path.length) {
-      if (partial === undefined) {
-        const error = new TypeError(`Cannot read path ${path.substr(re.lastIndex)} of undefined ${path.substr(0, re.lastIndex)}`);
-        error.fullPath = path;
-        error.lastValid = path.substr(0, re.lastIndex);
-        throw error;
-      }
       parent = partial;
       previousIndex = re.lastIndex; // for the error message
       const match = re.exec(path);
       if (!match) throw makeDeepGetError(path, path.substr(previousIndex));
       const [text, attr, index] = match;
+      if (partial === undefined) {
+        const error = new TypeError(`Cannot read path ${text} of undefined ${path.substr(0, previousIndex)}`);
+        error.fullPath = path;
+        error.lastValid = path.substr(0, previousIndex);
+        error.firstInvalid = attr || index;
+        error.currentPath = path.substr(0, re.lastIndex);
+        throw error;
+      }
       if (attr !== undefined) {
         lastId = attr;
         partial = partial[attr];
@@ -200,18 +236,49 @@ export class Model {
     return [parent, partial, lastId];
   }
 
-  deepGet(path) {
-    return this._deepGetMinusOne(path)[1];
+  deepGet(path, parent) {
+    return this._deepGetMinusOne(path, parent)[1];
+  }
+
+  deepGetMaybe(path, parent) {
+    try {
+      return this.deepGet(path, parent);
+    } catch (error) {
+      if (error.fullPath === path) return undefined;
+      else throw error;
+    }
   }
 
   deepSet(path, value) {
-    const [parent, current, lastIdentifier] = this._deepGetMinusOne(path);
+    let container;
+    if (this.constructor.options.acessors) {
+      container = this[modelData] = {};
+    } else {
+      container = this.subject;
+    }
+    const [parent, current, lastIdentifier] = this._deepGetMinusOne(path, container);
     if (current !== undefined && current.set) current.set(value);
     else if (parent.deepSet) parent.deepSet(lastIdentifier, value);
     else if (typeof lastIdentifier === `string`) parent[lastIdentifier] = value;
     else throw makeDeepGetError(path, lastIdentifier);
   }
+
+  deepSetWithParents(path, parent) {
+    for (;;) {
+      try {
+        return this.deepSet(path, parent);
+      } catch (error) {
+        // XXX will blow up on arrays, I don't think it can happen with Mongoose schemas though
+        if (error.fullPath && error.lastValid) {
+          this.deepSet(error.lastValid, {});
+        }
+        else throw error;
+      }
+    }
+  }
 }
+
+class Model {} // placeholder so that createSubDocClasses doesn't break for now
 
 export class ArrayModel extends Model {
   [initialize](data = []) {
