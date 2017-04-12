@@ -83,38 +83,53 @@ export class Model {
     }
   }
 
-  deepGet(path) {
+  _deepGetMinusOne(path, parent) {
     if (typeof path !== `string`) return this.data[path];
     const re = /(?:\.?([a-zA-Z_$][\w$]*))|(?:\[([^\]]+)\])/gy;
     let partial = this.data;
+    let previousIndex = 0;
+    let lastId;
     while (re.lastIndex < path.length) {
-      const previousIndex = re.lastIndex; // for the error message
+      parent = partial;
+      previousIndex = re.lastIndex; // for the error message
       const match = re.exec(path);
       if (!match) throw makeDeepGetError(path, path.substr(previousIndex));
       const [text, attr, index] = match;
       if (attr !== undefined) {
+        lastId = attr;
         partial = partial[attr];
       } else if (index !== undefined) {
-        let parsedIndex;
         try {
-          parsedIndex = JSON.parse(index);
+          lastId = JSON.parse(index);
         } catch (e) {
           throw makeDeepGetError(path, index);
         }
-        partial = partial[parsedIndex];
+        partial = partial[lastId];
       } else {
         // not sure how this would happen but…
         throw makeDeepGetError(path, text);
       }
 
-      if (partial && partial.deepGet && re.lastIndex < path.length)
+      if (partial && partial._deepGetMinusOne && re.lastIndex < path.length)
         try {
-          return partial.deepGet(path.substr(re.lastIndex));
+          return partial._deepGetMinusOne(path.substr(re.lastIndex));
         } catch (e) {
           throw makeDeepGetError(path, e);
         }
     }
-    return partial;
+    return [parent, partial, lastId];
+  }
+
+  deepGet(path) {
+    return this._deepGetMinusOne(path)[1];
+  }
+
+  deepSet(path, value) {
+    const [parent, current, lastIdentifier] = this._deepGetMinusOne(path);
+    if (current !== undefined && current.set) current.set(value);
+    else if (parent.deepSet) parent.deepSet(lastIdentifier, value);
+    else if (typeof lastIdentifier === `string`) parent[lastIdentifier] = value;
+    else throw makeDeepGetError(path, lastIdentifier);
   }
 }
 
@@ -145,7 +160,9 @@ export class ArrayModel extends Model {
   get length() {return this.data.length}
   [Symbol.iterator]() {return this.data[Symbol.interator]()}
 
-  deepGet(path) {
+  // TODO Array methods push, pop, slice, etc
+
+  _deepGetMinusOne(path) {
     if (typeof path === `number`) return this.data[path];
     if (typeof path !== `string`) return undefined; // or throw?
     const re = /^\[?(\d+)\]?/y;
@@ -158,12 +175,12 @@ export class ArrayModel extends Model {
       throw makeDeepGetError(path, match[1]);
     }
     const doc = this.data[index];
-    if (doc && doc.deepGet && re.lastIndex < path.length)
+    if (doc && doc._deepGetMinusOne && re.lastIndex < path.length)
       try {
-        return doc.deepGet(path.substr(re.lastIndex));
+        return doc._deepGetMinusOne(path.substr(re.lastIndex));
       } catch (e) {
         throw makeDeepGetError(path, e);
       }
-    return doc;
+    return [this, doc, index];
   }
 }
