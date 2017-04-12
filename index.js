@@ -40,13 +40,11 @@ export class BaseM {
 
   static initClass(options) {
     this.options = {
-      createEmptySubDocs: false,
       initialize: true,
       validateOnCreation: true,
       accessors: true,
       ...options,
     };
-    this.createSubDocClasses();
     // if (this.options.accessors) {
     //   const proxies = Class[nestedProxies] = new Map();
     //   Class.schema.eachPath((path, schemaPath) => {
@@ -101,10 +99,7 @@ export class BaseM {
     const M = this.constructor;
     M.schema.eachPath((path, schemaPath) => {
       const value = this.deepGetMaybe(path, data);
-      const SDClass = M.subDocClasses.get(path);
-      if (SDClass && (value !== undefined || M.options.createEmptySubDocs)) {
-        this.deepSetWithParents(path, new SDClass(value));
-      } else if (value !== undefined) {
+      if (value !== undefined) {
         this.deepSetWithParents(path, value);
       }
     });
@@ -113,45 +108,23 @@ export class BaseM {
     return this;
   }
 
-  static createSubDocClasses() {
-    this.subDocClasses = new Map();
-    this.schema.eachPath((name, schemaPath) => {
-      if (schemaPath.hasOwnProperty(`schema`)) {
-        if (schemaPath.instance === `Array`) {
-          class SubDocArray extends ArrayModel {
-            static schema = schemaPath.schema
-            static options = this.options
-          }
-          this.subDocClasses.set(name, SubDocArray);
-          SubDocArray.docClass = class SubDoc extends Model {
-            static schema = schemaPath.schema
-            static options = this.options
-          };
-        } else {
-          this.subDocClasses.set(name, class SubDoc extends Model {
-            static schema = schemaPath.schema
-            static options = this.options
-          });
-        }
-      }
-    });
-  }
-
   validateSync(options = {}) {
-    const {schema} = this.constructor;
+    const schema = options.schema || this.constructor.schema;
     if (schema) {
       const errors = [];
       // not schema.eachPath() so that we can return partway
       for (const path of Object.getOwnPropertyNames(schema.paths)) {
         const schemaPath = schema.paths[path];
-        const item = this.deepGetMaybe(path);
+        const item = this.deepGetMaybe(path, options.object);
         let error;
-        // TODO: the path itself may have validations, this is especially useful
-        // (and used?) with arrays.
-        if (item && item.validateSync)
-          error = item.validateSync(options);
-        else
+        if (schemaPath.constructor.schemaName === `DocumentArray`) {
+          // TODO: the path itself may have validations, like maybe being required
+          error = this._validateArraySync(item, schemaPath, options);
+        } else if (schemaPath.$isSingleNested) {
+          error = this.validateSync({...options, object: item, schema: schemaPath.schema});
+        } else {
           error = schemaPath.doValidateSync(item);
+        }
         if (error) {
           if (options.collect) errors.push([path, error]);
           else if (options.throw) throw error;
@@ -182,6 +155,29 @@ export class BaseM {
       if (error) reject(error);
       else resolve();
     });
+  }
+
+  _validateArraySync(array, schemaPath, options) {
+    const errors = [];
+    let error = schemaPath.constructor.prototype.__proto__.doValidateSync.call(schemaPath, array);
+    if (error) {
+      if (options.collect) errors.push([schemaPath.path, error]);
+      else if (options.throw) throw error;
+      else return error;
+    }
+    for (const [index, object] of array.entries()) {
+      error = this.validateSync({...options, schema: schemaPath.schema, object});
+      if (error) {
+        if (options.collect) errors.push([index, error]);
+        else if (options.throw) throw error;
+        else return error;
+      }
+    }
+    if (errors.length) {
+      const collected = new CompoundValidationError(errors);
+      if (options.throw) throw collected;
+      else return collected;
+    }
   }
 
   _deepGetMinusOne(path, parent) {
@@ -278,58 +274,56 @@ export class BaseM {
   }
 }
 
-class Model {} // placeholder so that createSubDocClasses doesn't break for now
-
-export class ArrayModel extends Model {
-  [initialize](data = []) {
-    this[modelData] = data.map((item) => new this.constructor.docClass(item));
-  }
-
-  validateSync(options = {}) {
-    const {schema} = this.constructor;
-    if (schema) {
-      const errors = [];
-      for (const [index, item] of this[modelData].entries()) {
-        console.debug(`validating item ${index}:`, item);
-        const error = item.validateSync(options);
-        if (error) {
-          if (options.collect) errors.push([index, error]);
-          else if (options.throw) throw error;
-          else return error;
-        }
-      }
-      if (errors.length) {
-        const collected = new CompoundValidationError(errors);
-        if (options.throw) throw collected;
-        else return collected;
-      }
-    }
-  }
-
-  get length() {return this[modelData].length}
-  [Symbol.iterator]() {return this[modelData][Symbol.interator]()}
-
-  // TODO Array methods push, pop, slice, etc
-
-  _deepGetMinusOne(path) {
-    if (typeof path === `number`) return this[modelData][path];
-    if (typeof path !== `string`) return undefined; // or throw?
-    const re = /^\[?(\d+)\]?/y;
-    const match = re.exec(path);
-    if (!match) throw makeDeepGetError(path);
-    let index;
-    try {
-      index = JSON.parse(match[1]);
-    } catch (e) {
-      throw makeDeepGetError(path, match[1]);
-    }
-    const doc = this[modelData][index];
-    if (doc && doc._deepGetMinusOne && re.lastIndex < path.length)
-      try {
-        return doc._deepGetMinusOne(path.substr(re.lastIndex));
-      } catch (e) {
-        throw makeDeepGetError(path, e);
-      }
-    return [this, doc, index];
-  }
-}
+// export class ArrayModel extends Model {
+//   [initialize](data = []) {
+//     this[modelData] = data.map((item) => new this.constructor.docClass(item));
+//   }
+//
+//   validateSync(options = {}) {
+//     const {schema} = this.constructor;
+//     if (schema) {
+//       const errors = [];
+//       for (const [index, item] of this[modelData].entries()) {
+//         console.debug(`validating item ${index}:`, item);
+//         const error = item.validateSync(options);
+//         if (error) {
+//           if (options.collect) errors.push([index, error]);
+//           else if (options.throw) throw error;
+//           else return error;
+//         }
+//       }
+//       if (errors.length) {
+//         const collected = new CompoundValidationError(errors);
+//         if (options.throw) throw collected;
+//         else return collected;
+//       }
+//     }
+//   }
+//
+//   get length() {return this[modelData].length}
+//   [Symbol.iterator]() {return this[modelData][Symbol.interator]()}
+//
+//   // TODO Array methods push, pop, slice, etc
+//
+//   _deepGetMinusOne(path) {
+//     if (typeof path === `number`) return this[modelData][path];
+//     if (typeof path !== `string`) return undefined; // or throw?
+//     const re = /^\[?(\d+)\]?/y;
+//     const match = re.exec(path);
+//     if (!match) throw makeDeepGetError(path);
+//     let index;
+//     try {
+//       index = JSON.parse(match[1]);
+//     } catch (e) {
+//       throw makeDeepGetError(path, match[1]);
+//     }
+//     const doc = this[modelData][index];
+//     if (doc && doc._deepGetMinusOne && re.lastIndex < path.length)
+//       try {
+//         return doc._deepGetMinusOne(path.substr(re.lastIndex));
+//       } catch (e) {
+//         throw makeDeepGetError(path, e);
+//       }
+//     return [this, doc, index];
+//   }
+// }
