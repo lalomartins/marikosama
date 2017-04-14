@@ -54,7 +54,7 @@ export class BaseM {
     }
   }
 
-  static createAccessors(subjectClass, schema, basePath = ``) {
+  static createAccessors(subjectClass, schema) {
     const M = this;
     if (subjectClass === undefined) subjectClass = this.subjectClass;
     if (schema === undefined) schema = this.schema;
@@ -122,26 +122,27 @@ export class BaseM {
           },
         });
       } else if (schemaPath.$isMongooseDocumentArray) {
-        // class ArrayProxy extends ArrayProxyBase {
-        //   static parent = M
-        //   static path = path
-        // }
-        // ArrayProxy.createAccessors();
+        // class ArrayProxy extends ArrayProxyBase {}
+        // this.createAccessors(ArrayProxy, schemaPath.schema);
         // Object.defineProperty(subjectClass.prototype, path, {
         //   get() {
-        //     return new ArrayProxy(this);
+        //     const proxy = new ArrayProxy(this, path);
+        //     Object.defineProperty(this, path, {
+        //       value: proxy,
+        //       __proto__: null,
+        //     });
+        //     return proxy;
         //   },
         //   set(value) {
         //     this.m.deepSet(path, value);
         //   },
         // });
       } else if (schemaPath.$isSingleNested) {
-        const fullPath = basePath + path + `.`;
         class NestedProxy extends NestedProxyBase {}
-        this.createAccessors(NestedProxy, schemaPath.schema, fullPath);
+        this.createAccessors(NestedProxy, schemaPath.schema);
         Object.defineProperty(subjectClass.prototype, path, {
           get() {
-            const proxy = new NestedProxy(this, fullPath);
+            const proxy = new NestedProxy(this, path);
             Object.defineProperty(this, path, {
               value: proxy,
               __proto__: null,
@@ -149,7 +150,10 @@ export class BaseM {
             return proxy;
           },
           set(value) {
-            this.m.deepSet(path, value);
+            if (M.options.allowSettingThrough)
+              this.m.deepSetWithParents(path, value);
+            else
+              this.m.deepSet(path, value);
           },
         });
       } else {
@@ -158,7 +162,10 @@ export class BaseM {
             return this.m.deepGet(path);
           },
           set(value) {
-            this.m.deepSet(path, value);
+            if (M.options.allowSettingThrough)
+              this.m.deepSetWithParents(path, value);
+            else
+              this.m.deepSet(path, value);
           },
         });
       }
@@ -340,11 +347,16 @@ export class BaseM {
       } catch (error) {
         // XXX will blow up on arrays, I don't think it can happen with Mongoose schemas though
         if (error.fullPath && error.lastValid) {
-          this.deepSet(error.lastValid, {});
+          this.rootM().deepSet(error.lastValid, {});
         }
         else throw error;
       }
     }
+  }
+
+  rootM() {
+    if (this.__proto__ instanceof this.constructor) return this.__proto__.rootM();
+    else return this;
   }
 }
 
@@ -406,6 +418,6 @@ export class NestedProxyBase {
   constructor(proxySelf, basePath) {
     this[symbols.proxySelf] = proxySelf;
     this.m = Object.create(proxySelf.m);
-    this.m.basePath = basePath;
+    this.m.basePath = `${proxySelf.m.basePath || ``}${basePath}.`;
   }
 }

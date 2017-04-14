@@ -9,6 +9,11 @@ const onlinePresenceSchema = new Schema({
   videoChannels: [String],
 });
 
+const personOrOrgaSchema = new Schema({
+  name: String,
+  online: onlinePresenceSchema,
+});
+
 const kittySchema = new Schema({
   name: {type: String, required: true},
   likes: [{
@@ -37,9 +42,10 @@ const kittySchema = new Schema({
       },
     },
   },
+  owner: personOrOrgaSchema,
 });
 
-@model({schema: kittySchema, options: {validateOnCreation: false}})
+@model({schema: kittySchema, options: {validateOnCreation: false, allowSettingThrough: true}})
 class Kitty {
   mew() {console.log(`${this.name} says: mew`)}
 }
