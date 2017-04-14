@@ -54,13 +54,15 @@ export class BaseM {
     }
   }
 
-  static createAccessors() {
+  static createAccessors(subjectClass, schema, basePath = ``) {
     const M = this;
+    if (subjectClass === undefined) subjectClass = this.subjectClass;
+    if (schema === undefined) schema = this.schema;
     const proxies = this[symbols.nestedProxies] = new Map();
-    this.schema.eachPath((path, schemaPath) => {
+    schema.eachPath((path, schemaPath) => {
       const parts = path.split(`.`);
       const head = parts.shift();
-      if (this.subjectClass.prototype[head] !== undefined && !proxies.has(head)) return;
+      if (subjectClass.prototype[head] !== undefined && !proxies.has(head)) return;
       if (parts.length) {
         const tail = parts.pop();
         if (!proxies.has(head)) {
@@ -68,7 +70,7 @@ export class BaseM {
             [symbols.proxyStructure]: new Map(),
           };
           proxies.set(head, proxy);
-          Object.defineProperty(this.subjectClass.prototype, head, {
+          Object.defineProperty(subjectClass.prototype, head, {
             get() {
               const proxyInstance = Object.create(proxy);
               proxyInstance[symbols.proxySelf] = this;
@@ -119,16 +121,44 @@ export class BaseM {
               this[symbols.proxySelf].m.deepSet(`${partial}.${tail}`, value);
           },
         });
+      } else if (schemaPath.$isMongooseDocumentArray) {
+        // class ArrayProxy extends ArrayProxyBase {
+        //   static parent = M
+        //   static path = path
+        // }
+        // ArrayProxy.createAccessors();
+        // Object.defineProperty(subjectClass.prototype, path, {
+        //   get() {
+        //     return new ArrayProxy(this);
+        //   },
+        //   set(value) {
+        //     this.m.deepSet(path, value);
+        //   },
+        // });
+      } else if (schemaPath.$isSingleNested) {
+        const fullPath = basePath + path + `.`;
+        class NestedProxy extends NestedProxyBase {}
+        this.createAccessors(NestedProxy, schemaPath.schema, fullPath);
+        Object.defineProperty(subjectClass.prototype, path, {
+          get() {
+            const proxy = new NestedProxy(this, fullPath);
+            Object.defineProperty(this, path, {
+              value: proxy,
+              __proto__: null,
+            });
+            return proxy;
+          },
+          set(value) {
+            this.m.deepSet(path, value);
+          },
+        });
       } else {
-        Object.defineProperty(this.subjectClass.prototype, head, {
+        Object.defineProperty(subjectClass.prototype, path, {
           get() {
             return this.m.deepGet(path);
           },
           set(value) {
-            if (M.options.allowSettingThrough)
-              this.m.deepSetWithParents(path, value);
-            else
-              this.m.deepSet(path, value);
+            this.m.deepSet(path, value);
           },
         });
       }
@@ -165,7 +195,7 @@ export class BaseM {
         const schemaPath = schema.paths[path];
         const item = this.deepGetMaybe(path, options.object);
         let error;
-        if (schemaPath.constructor.schemaName === `DocumentArray`) {
+        if (schemaPath.$isMongooseDocumentArray) {
           // TODO: the path itself may have validations, like maybe being required
           error = this._validateArraySync(item, schemaPath, options);
         } else if (schemaPath.$isSingleNested) {
@@ -235,6 +265,7 @@ export class BaseM {
       } else {
         parent = this.subject;
       }
+      if (this.basePath) path = this.basePath + path;
     }
     if (typeof path !== `string`) return parent[path];
     const re = /(?:\.?([a-zA-Z_$][\w$]*))|(?:\[([^\]]+)\])/gy;
@@ -370,3 +401,11 @@ export class BaseM {
 //     return [this, doc, index];
 //   }
 // }
+
+export class NestedProxyBase {
+  constructor(proxySelf, basePath) {
+    this[symbols.proxySelf] = proxySelf;
+    this.m = Object.create(proxySelf.m);
+    this.m.basePath = basePath;
+  }
+}

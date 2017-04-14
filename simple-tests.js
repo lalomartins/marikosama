@@ -16,6 +16,7 @@ const kittySchema = new Schema({
     level: {type: Number, default: 5, min: 0, max: 10},
   }],
   online: onlinePresenceSchema,
+  related: [onlinePresenceSchema],
   features: {
     breed: {type: String, required: true},
     eyes: String,
