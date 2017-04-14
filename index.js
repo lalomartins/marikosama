@@ -58,6 +58,14 @@ export class BaseM {
     const M = this;
     if (subjectClass === undefined) subjectClass = this.subjectClass;
     if (schema === undefined) schema = this.schema;
+
+    const basicSetter = (path) => function set(value) {
+      if (M.options.allowSettingThrough)
+        this.m.deepSetWithParents(path, value);
+      else
+        this.m.deepSet(path, value);
+    };
+
     const proxies = this[symbols.nestedProxies] = new Map();
     schema.eachPath((path, schemaPath) => {
       const parts = path.split(`.`);
@@ -122,20 +130,22 @@ export class BaseM {
           },
         });
       } else if (schemaPath.$isMongooseDocumentArray) {
-        // class ArrayProxy extends ArrayProxyBase {}
-        // this.createAccessors(ArrayProxy, schemaPath.schema);
+        // class NestedProxy extends ArrayItemProxyBase {}
+        // this.createAccessors(NestedProxy, schemaPath.schema);
+        // class ArrayProxy extends ArrayProxyBase {
+        //   static itemClass = NestedProxy
+        // }
         // Object.defineProperty(subjectClass.prototype, path, {
         //   get() {
         //     const proxy = new ArrayProxy(this, path);
         //     Object.defineProperty(this, path, {
-        //       value: proxy,
+        //       get: () => proxy,
+        //       set: basicSetter(path),
         //       __proto__: null,
         //     });
         //     return proxy;
         //   },
-        //   set(value) {
-        //     this.m.deepSet(path, value);
-        //   },
+        //   set: basicSetter(path),
         // });
       } else if (schemaPath.$isSingleNested) {
         class NestedProxy extends NestedProxyBase {}
@@ -144,29 +154,20 @@ export class BaseM {
           get() {
             const proxy = new NestedProxy(this, path);
             Object.defineProperty(this, path, {
-              value: proxy,
+              get: () => proxy,
+              set: basicSetter(path),
               __proto__: null,
             });
             return proxy;
           },
-          set(value) {
-            if (M.options.allowSettingThrough)
-              this.m.deepSetWithParents(path, value);
-            else
-              this.m.deepSet(path, value);
-          },
+          set: basicSetter(path),
         });
       } else {
         Object.defineProperty(subjectClass.prototype, path, {
           get() {
             return this.m.deepGet(path);
           },
-          set(value) {
-            if (M.options.allowSettingThrough)
-              this.m.deepSetWithParents(path, value);
-            else
-              this.m.deepSet(path, value);
-          },
+          set: basicSetter(path),
         });
       }
     });

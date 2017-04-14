@@ -20,6 +20,7 @@ const kittySchema = new Schema({
     thing: {type: String, required: true},
     level: {type: Number, default: 5, min: 0, max: 10},
   }],
+  quotes: [String],
   online: onlinePresenceSchema,
   related: [onlinePresenceSchema],
   features: {
