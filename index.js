@@ -353,7 +353,7 @@ export class BaseM {
     while (value.hasOwnProperty(symbols.proxySelf)) value = value[symbols.proxySelf];
     if (current !== undefined && current.set) current.set(value);
     else if (parent.deepSet) parent.deepSet(lastIdentifier, value);
-    else if (typeof lastIdentifier === `string`) parent[lastIdentifier] = value;
+    else if (typeof lastIdentifier === `string` || typeof lastIdentifier === `number`) parent[lastIdentifier] = value;
     else throw makeDeepGetError(path, lastIdentifier);
   }
 
@@ -434,12 +434,12 @@ function proxyArrayProxy(proxy) {
   return new BuiltinProxy(proxy, {
     get(target, prop) {
       if ((typeof prop === `number`) || (typeof prop === `string` && !isNaN(prop)))
-        return target.get(prop);
+        return target.get(Number(prop));
       return target[prop];
     },
     set(target, prop, value) {
       if ((typeof prop === `number`) || (typeof prop === `string` && !isNaN(prop)))
-        return target.set(prop, value);
+        return target.set(Number(prop), value);
       return target[prop] = value;
     },
   });
