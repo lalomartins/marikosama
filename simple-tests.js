@@ -49,7 +49,7 @@ const kittySchema = new Schema({
   justToBeAnnoying: Schema.Types.ObjectId,
 });
 
-@model({schema: kittySchema, options: {validateOnCreation: false, allowSettingThrough: true}})
+@model({schema: kittySchema, options: {validateOnCreation: false}})
 class Kitty {
   mew() {console.log(`${this.name} says: mew`)}
 }
