@@ -140,11 +140,12 @@ export class BaseM {
               this[symbols.proxySelf].m.deepSet(`${partial}.${tail}`, value);
           },
         });
-      } else if (schemaPath.$isMongooseDocumentArray) {
-        class NestedProxy extends NestedProxyBase {}
-        this.createAccessors(NestedProxy, schemaPath.schema);
-        class ArrayProxy extends ArrayProxyBase {
-          static itemClass = NestedProxy
+      } else if (schemaPath.$isMongooseDocumentArray || schemaPath.constructor.name === `SchemaArray`) {
+        class ArrayProxy extends ArrayProxyBase {}
+        if (schemaPath.$isMongooseDocumentArray) {
+          class NestedProxy extends NestedProxyBase {}
+          this.createAccessors(NestedProxy, schemaPath.schema);
+          ArrayProxy.itemClass = NestedProxy;
         }
         Object.defineProperty(subjectClass.prototype, path, {
           get() {
@@ -385,7 +386,9 @@ export class ArrayProxyBase {
   }
 
   makeItemProxy(index, item) {
-    return new this.constructor.itemClass(this[symbols.proxySelf], `${this.basePath}[${index}]`);
+    if (this.constructor.itemClass)
+      return new this.constructor.itemClass(this[symbols.proxySelf], `${this.basePath}[${index}]`);
+    else return item;
   }
 
   get(index) {

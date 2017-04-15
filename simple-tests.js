@@ -44,6 +44,9 @@ const kittySchema = new Schema({
     },
   },
   owner: personOrOrgaSchema,
+  // other stuff doesn't get deep/clever accessors but you can still use deepGet and deepSet
+  notes: Schema.Types.Mixed,
+  justToBeAnnoying: Schema.Types.ObjectId,
 });
 
 @model({schema: kittySchema, options: {validateOnCreation: false, allowSettingThrough: true}})
@@ -63,6 +66,7 @@ const tartar = Kitty.M.load({
     breed: `mixed`,
     eyes: `blue`,
   },
+  quotes: [`no.`, `NO`, `it was awful`],
 });
 tartar.mew();
 
