@@ -70,7 +70,7 @@ export class BaseM {
     schema.eachPath((path, schemaPath) => {
       const parts = path.split(`.`);
       const head = parts.shift();
-      if (subjectClass.prototype[head] !== undefined && !proxies.has(head)) return;
+      if (!proxies.has(head) && subjectClass.prototype[head] !== undefined) return;
       if (parts.length) {
         const tail = parts.pop();
         if (!proxies.has(head)) {
@@ -82,8 +82,10 @@ export class BaseM {
             get() {
               const proxyInstance = Object.create(proxy);
               proxyInstance[symbols.proxySelf] = this;
-              return proxyInstance;
+              if (this.m && this.m.deepGet(head))
+                return proxyInstance;
             },
+            set: basicSetter(head),
           });
         }
         let proxy = proxies.get(head);
@@ -99,7 +101,8 @@ export class BaseM {
               get() {
                 const proxyInstance = Object.create(newProxy);
                 proxyInstance[symbols.proxySelf] = this[symbols.proxySelf];
-                return proxyInstance;
+                if (this[symbols.proxySelf].m && this[symbols.proxySelf].m.deepGet(`${partial}.${part}`))
+                  return proxyInstance;
               },
               set(value) {
                 if (M.options.allowSettingThrough)
@@ -130,23 +133,24 @@ export class BaseM {
           },
         });
       } else if (schemaPath.$isMongooseDocumentArray) {
-        // class NestedProxy extends ArrayItemProxyBase {}
-        // this.createAccessors(NestedProxy, schemaPath.schema);
-        // class ArrayProxy extends ArrayProxyBase {
-        //   static itemClass = NestedProxy
-        // }
-        // Object.defineProperty(subjectClass.prototype, path, {
-        //   get() {
-        //     const proxy = new ArrayProxy(this, path);
-        //     Object.defineProperty(this, path, {
-        //       get: () => proxy,
-        //       set: basicSetter(path),
-        //       __proto__: null,
-        //     });
-        //     return proxy;
-        //   },
-        //   set: basicSetter(path),
-        // });
+        class NestedProxy extends NestedProxyBase {}
+        this.createAccessors(NestedProxy, schemaPath.schema);
+        class ArrayProxy extends ArrayProxyBase {
+          static itemClass = NestedProxy
+        }
+        Object.defineProperty(subjectClass.prototype, path, {
+          get() {
+            const proxy = new ArrayProxy(this, path);
+            Object.defineProperty(this, path, {
+              get: () => proxy,
+              set: basicSetter(path),
+              __proto__: null,
+            });
+            if (this.m && this.m.deepGet(path))
+              return proxy;
+          },
+          set: basicSetter(path),
+        });
       } else if (schemaPath.$isSingleNested) {
         class NestedProxy extends NestedProxyBase {}
         this.createAccessors(NestedProxy, schemaPath.schema);
@@ -158,7 +162,8 @@ export class BaseM {
               set: basicSetter(path),
               __proto__: null,
             });
-            return proxy;
+            if (this.m && this.m.deepGet(path))
+              return proxy;
           },
           set: basicSetter(path),
         });
@@ -335,6 +340,7 @@ export class BaseM {
   deepSet(path, value) {
     // TODO validate
     const [parent, current, lastIdentifier] = this._deepGetMinusOne(path);
+    while (value.hasOwnProperty(symbols.proxySelf)) value = value[symbols.proxySelf];
     if (current !== undefined && current.set) current.set(value);
     else if (parent.deepSet) parent.deepSet(lastIdentifier, value);
     else if (typeof lastIdentifier === `string`) parent[lastIdentifier] = value;
@@ -361,59 +367,58 @@ export class BaseM {
   }
 }
 
-// export class ArrayModel extends Model {
-//   [initialize](data = []) {
-//     this[symbols.modelData] = data.map((item) => new this.constructor.docClass(item));
-//   }
-//
-//   validateSync(options = {}) {
-//     const {schema} = this.constructor;
-//     if (schema) {
-//       const errors = [];
-//       for (const [index, item] of this[symbols.modelData].entries()) {
-//         console.debug(`validating item ${index}:`, item);
-//         const error = item.validateSync(options);
-//         if (error) {
-//           if (options.collect) errors.push([index, error]);
-//           else if (options.throw) throw error;
-//           else return error;
-//         }
-//       }
-//       if (errors.length) {
-//         const collected = new CompoundValidationError(errors);
-//         if (options.throw) throw collected;
-//         else return collected;
-//       }
-//     }
-//   }
-//
-//   get length() {return this[symbols.modelData].length}
-//   [Symbol.iterator]() {return this[symbols.modelData][Symbol.interator]()}
-//
-//   // TODO Array methods push, pop, slice, etc
-//
-//   _deepGetMinusOne(path) {
-//     if (typeof path === `number`) return this[symbols.modelData][path];
-//     if (typeof path !== `string`) return undefined; // or throw?
-//     const re = /^\[?(\d+)\]?/y;
-//     const match = re.exec(path);
-//     if (!match) throw makeDeepGetError(path);
-//     let index;
-//     try {
-//       index = JSON.parse(match[1]);
-//     } catch (e) {
-//       throw makeDeepGetError(path, match[1]);
-//     }
-//     const doc = this[symbols.modelData][index];
-//     if (doc && doc._deepGetMinusOne && re.lastIndex < path.length)
-//       try {
-//         return doc._deepGetMinusOne(path.substr(re.lastIndex));
-//       } catch (e) {
-//         throw makeDeepGetError(path, e);
-//       }
-//     return [this, doc, index];
-//   }
-// }
+
+export class ArrayProxyBase {
+  constructor(proxySelf, basePath) {
+    this[symbols.proxySelf] = proxySelf;
+    this.basePath = basePath;
+  }
+
+  makeItemProxy(index, item) {
+    return new this.constructor.itemClass(this[symbols.proxySelf], `${this.basePath}[${index}]`);
+  }
+
+  get(index) {
+    const item = this[symbols.proxySelf].m.deepGet(`${this.basePath}[${index}]`);
+    if (item === undefined) return item;
+    else return this.makeItemProxy(index, item);
+  }
+
+  set(index, value) {
+    while (value.hasOwnProperty(symbols.proxySelf)) value = value[symbols.proxySelf];
+    if (this[symbols.proxySelf].m.constructor.options.allowSettingThrough)
+      this[symbols.proxySelf].m.deepSetWithParents(`${this.basePath}[${index}]`, value);
+    else
+      this[symbols.proxySelf].m.deepSet(`${this.basePath}[${index}]`, value);
+    return this.makeItemProxy(index, value);
+  }
+
+  get length() {
+    return this[symbols.proxySelf].m.deepGet(this.basePath).length;
+  }
+
+  *[Symbol.iterator]() {
+    for (const [index, value] of this[symbols.proxySelf].m.deepGet(this.basePath).entries())
+      yield this.makeItemProxy(index, value);
+  }
+
+  *entries() {
+    for (const [index, value] of this[symbols.proxySelf].m.deepGet(this.basePath).entries())
+      yield [index, this.makeItemProxy(index, value)];
+  }
+
+  push(value) {
+    while (value.hasOwnProperty(symbols.proxySelf)) value = value[symbols.proxySelf];
+    return this[symbols.proxySelf].m.deepGet(this.basePath).push(value);
+  }
+
+  unshift(value) {
+    while (value.hasOwnProperty(symbols.proxySelf)) value = value[symbols.proxySelf];
+    return this[symbols.proxySelf].m.deepGet(this.basePath).unshift(value);
+  }
+
+  // TODO all Array methods pop, slice, etc
+}
 
 export class NestedProxyBase {
   constructor(proxySelf, basePath) {
