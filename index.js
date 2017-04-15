@@ -1,6 +1,6 @@
 import {CompoundValidationError, makeDeepGetError} from './errors';
+import featureRegistry from './feature-registry';
 import symbols from './symbols';
-import {createAccessors} from './proxying';
 
 export {symbols};
 
@@ -44,12 +44,13 @@ export class BaseM {
       ...options,
     };
     if (this.options.accessors) {
-      this.createAccessors();
+      const proxying = featureRegistry.get(`proxying`);
+      if (proxying && proxying.createAccessors) {
+        proxying.createAccessors(this, this.subjectClass, this.schema);
+      } else {
+        console.error(`Mariko-Sama: proxying requested but the feature wasn't imported`);
+      }
     }
-  }
-
-  static createAccessors() {
-    createAccessors(this, this.subjectClass, this.schema);
   }
 
   static load(data) {

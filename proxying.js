@@ -1,4 +1,8 @@
+import featureRegistry from './feature-registry';
 import symbols from './symbols';
+
+if (!featureRegistry.has(`proxying`)) featureRegistry.set(`proxying`, {});
+const feature = featureRegistry.get(`proxying`);
 
 let BuiltinProxy;
 try {
@@ -209,3 +213,5 @@ export function createAccessors(M, subjectClass, schema) {
     }
   });
 }
+
+feature.createAccessors = createAccessors;

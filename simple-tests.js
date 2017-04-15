@@ -1,4 +1,3 @@
-
 import * as marikosama from 'marikosama';
 import Schema from 'mongoose/lib/schema';
 import {model} from 'marikosama';
