@@ -5,9 +5,21 @@ import symbols from './symbols';
 export {symbols};
 
 export function model({schema, persistence, logic, options}) {
+  let schemaImplementation;
+  if (schema) {
+    for (const implementation of (featureRegistry.get(`schemas`) || []).values()) {
+      if (implementation.test(schema)) {
+        schemaImplementation = implementation;
+        break;
+      }
+    }
+    if (!schemaImplementation)
+      console.error(`Mariko-Sama: schema was provided but no matching feature provider was imported`);
+  }
   return function(Class) {
     class M extends BaseM {
       static schema = schema;
+      static schemaImplementation = schemaImplementation;
       static persistence = persistence;
       static subjectClass = Class;
     }

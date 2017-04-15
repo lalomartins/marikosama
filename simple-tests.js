@@ -1,5 +1,7 @@
 import * as marikosama from 'marikosama';
-import Schema from 'mongoose/lib/schema';
+import featureRegistry from './feature-registry';
+import {Schema} from 'marikosama/schemas/mongoose';
+import 'marikosama/proxying';
 import {model} from 'marikosama';
 
 const onlinePresenceSchema = new Schema({
@@ -53,7 +55,7 @@ class Kitty {
   mew() {console.log(`${this.name} says: mew`)}
 }
 
-window.marikoTest = {Schema, model, kittySchema, Kitty, marikosama};
+window.marikoTest = {Schema, model, kittySchema, Kitty, marikosama, featureRegistry};
 
 const tartar = Kitty.M.load({
   name: `Tartar Sauce`,
