@@ -8,7 +8,15 @@ export const symbols = {
   nestedProxies: Symbol(`nestedProxies`),
   proxySelf: Symbol(`proxySelf`),
   proxyStructure: Symbol(`proxyStructure`),
+  notAvailable: Symbol(`notAvailable`),
 };
+
+let BuiltinProxy;
+try {
+  BuiltinProxy = Proxy;
+} catch (e) {
+  BuiltinProxy = symbols.notAvailable;
+}
 
 
 export function model({schema, persistence, logic, options}) {
@@ -140,7 +148,9 @@ export class BaseM {
         }
         Object.defineProperty(subjectClass.prototype, path, {
           get() {
-            const proxy = new ArrayProxy(this, path);
+            let proxy = new ArrayProxy(this, path);
+            if (BuiltinProxy !== symbols.notAvailable)
+              proxy = proxyArrayProxy(proxy);
             Object.defineProperty(this, path, {
               get: () => proxy,
               set: basicSetter(path),
@@ -418,6 +428,21 @@ export class ArrayProxyBase {
   }
 
   // TODO all Array methods pop, slice, etc
+}
+
+function proxyArrayProxy(proxy) {
+  return new BuiltinProxy(proxy, {
+    get(target, prop) {
+      if ((typeof prop === `number`) || (typeof prop === `string` && !isNaN(prop)))
+        return target.get(prop);
+      return target[prop];
+    },
+    set(target, prop, value) {
+      if ((typeof prop === `number`) || (typeof prop === `string` && !isNaN(prop)))
+        return target.set(prop, value);
+      return target[prop] = value;
+    },
+  });
 }
 
 export class NestedProxyBase {
