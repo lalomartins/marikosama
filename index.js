@@ -1,3 +1,4 @@
+import {EventEmitter} from 'events';
 import {CompoundValidationError, makeDeepGetError} from './errors';
 import featureRegistry from './feature-registry';
 import symbols from './symbols';
@@ -38,8 +39,9 @@ export function model({schema, persistence, logic, options}) {
   };
 }
 
-export class BaseM {
+export class BaseM extends EventEmitter {
   constructor(subject) {
+    super();
     this.subject = subject;
     if (this.constructor.options.accessors) {
       this[symbols.modelData] = {};
@@ -104,14 +106,21 @@ export class BaseM {
 
   set(data) {
     const M = this.constructor;
+    const updates = {path: [], value: [], current: []};
     M.schema.eachPath((path, schemaPath) => {
       const value = this.deepGetMaybe(path, data);
       if (value !== undefined) {
-        this.deepSetWithParents(path, value);
+        const update = this.deepSetWithParents(path, value, {noEmit: true});
+        if (update) {
+          updates.path.push(update.path);
+          updates.value.push(update.value);
+          updates.current.push(update.current);
+        }
       }
     });
     if (M.options.validateOnCreation && data !== undefined)
       this.validateSync({throw: true});
+    if (updates.length) this.emit(`update`, [updates.path, updates.value, updates.current]);
     return this;
   }
 
@@ -309,20 +318,24 @@ export class BaseM {
     }
   }
 
-  deepSet(path, value) {
+  deepSet(path, value, options = {}) {
     // TODO validate
     const [parent, current, lastIdentifier] = this._deepGetMinusOne(path);
     while (value.hasOwnProperty(symbols.proxySelf)) value = value[symbols.proxySelf];
-    if (current !== undefined && current.set) current.set(value);
-    else if (parent.deepSet) parent.deepSet(lastIdentifier, value);
-    else if (typeof lastIdentifier === `string` || typeof lastIdentifier === `number`) parent[lastIdentifier] = value;
-    else throw makeDeepGetError(path, lastIdentifier);
+    if (current !== value) {
+      if (current !== undefined && current.set) current.set(value);
+      else if (parent.deepSet) parent.deepSet(lastIdentifier, value);
+      else if (typeof lastIdentifier === `string` || typeof lastIdentifier === `number`) parent[lastIdentifier] = value;
+      else throw makeDeepGetError(path, lastIdentifier);
+      if (options.noEmit) return {path, value, current};
+      else this.emit(`update`, path, value, current);
+    }
   }
 
-  deepSetWithParents(path, parent) {
+  deepSetWithParents(path, value, {options}) {
     for (;;) {
       try {
-        return this.deepSet(path, parent);
+        return this.deepSet(path, value);
       } catch (error) {
         // XXX will blow up on arrays, I don't think it can happen with Mongoose schemas though
         if (error.fullPath && error.lastValid) {
