@@ -1,7 +1,7 @@
-function subclassError(construtor, proto, parent = Error) {
-  construtor.prototype = Object.create(parent.prototype);
-  Object.assign(construtor.prototype, proto, {construtor});
-  return construtor;
+function subclassError(constructor, proto, parent = Error) {
+  constructor.prototype = Object.create(parent.prototype);
+  Object.assign(constructor.prototype, proto, {constructor});
+  return constructor;
 }
 
 export const CompoundValidationError = subclassError(

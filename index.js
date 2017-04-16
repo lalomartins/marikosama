@@ -44,13 +44,28 @@ export class BaseM {
     if (this.constructor.options.accessors) {
       this[symbols.modelData] = {};
     }
+    if (this.constructor.options.linking) {
+      let linking;
+      if (featureRegistry.has(`linking`)) {
+        if (typeof this.constructor.options.linking === `string`)
+          linking = featureRegistry.get(`linking`).get(this.constructor.options.linking);
+        else
+          linking = featureRegistry.get(`linking`).values().next().value;
+      }
+      if (linking && linking.initInstance) {
+        linking.initInstance(this);
+      } else if (!linking && this.constructor.options.linking !== symbols.ifAvailable) {
+        console.error(`Mariko-Sama: linking requested but no implementation was imported`);
+      }
+    }
   }
 
   static initClass(options) {
     this.options = {
       initialize: false,
       validateOnCreation: true,
-      accessors: true,
+      accessors: symbols.ifAvailable,
+      linking: symbols.ifAvailable,
       allowSettingThrough: false,
       proxyArrayProxy: true,
       ...options,
@@ -59,8 +74,22 @@ export class BaseM {
       const proxying = featureRegistry.get(`proxying`);
       if (proxying && proxying.createAccessors) {
         proxying.createAccessors(this, this.subjectClass, this.schema);
-      } else {
+      } else if (this.options.accessors !== symbols.ifAvailable) {
         console.error(`Mariko-Sama: proxying requested but the feature wasn't imported`);
+      }
+    }
+    if (this.options.linking) {
+      let linking;
+      if (featureRegistry.has(`linking`)) {
+        if (typeof this.options.linking === `string`)
+          linking = featureRegistry.get(`linking`).get(this.options.linking);
+        else
+          linking = featureRegistry.get(`linking`).values().next().value;
+      }
+      if (linking && linking.initClass) {
+        linking.initClass(this);
+      } else if (this.options.linking !== symbols.ifAvailable) {
+        console.error(`Mariko-Sama: linking requested but no implementation was imported`);
       }
     }
   }
