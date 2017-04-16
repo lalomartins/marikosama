@@ -21,25 +21,35 @@ class MarikoLink extends Link {
 
   set(value) {
     this.m.deepSet(this.path, value);
+    this.validate();
+  }
+
+  validate() {
+    const error = this.m.validatePathSync({path: this.path, collect: true});
+    if (error) {
+      // TODO propagate to children if appropriate
+      this.error = {
+        help: error.message,
+        state: `error`,
+        error,
+      };
+    } else this.error = null;
   }
 }
 
 const implementation = {
   initClass(M) {
     Object.assign(M.prototype, {
-      getLink(name) {
-        // console.debug(`getting link for ${name} in`, this, `, current value is`, this.deepGet(name));
-        if (this[symbols.valueLinkCache].has(name)) return this[symbols.valueLinkCache].get(name);
-        const link = new MarikoLink(this, name);
-        this[symbols.valueLinkCache].set(name, link);
-        return link;
+      getLink(name, validate) {
+        return this.deepLink(name, validate);
       },
 
-      deepLink(path) {
+      deepLink(path, validate) {
         // console.debug(`getting deep link for ${path} in`, this, `, current value is`, this.deepGet(path));
         if (this[symbols.valueLinkCache].has(path)) return this[symbols.valueLinkCache].get(path);
         const link = new MarikoLink(this, path);
         this[symbols.valueLinkCache].set(path, link);
+        if (validate) link.validate();
         return link;
       },
     });

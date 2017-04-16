@@ -115,23 +115,17 @@ export class BaseM {
     return this;
   }
 
+  // TODO this is the mongoose implementation, decouple
+  // We could just move it wholesale to mongoose.js but I feel there might be some
+  // core functionality that could stay here, so maybe postpone decoupling until
+  // we have another schema implementation to better know the requirements
   validateSync(options = {}) {
     const schema = options.schema || this.constructor.schema;
     if (schema) {
       const errors = [];
       // not schema.eachPath() so that we can return partway
       for (const path of Object.getOwnPropertyNames(schema.paths)) {
-        const schemaPath = schema.paths[path];
-        const item = this.deepGetMaybe(path, options.object);
-        let error;
-        if (schemaPath.$isMongooseDocumentArray) {
-          // TODO: the path itself may have validations, like maybe being required
-          error = this._validateArraySync(item, schemaPath, options);
-        } else if (schemaPath.$isSingleNested) {
-          error = this.validateSync({...options, object: item, schema: schemaPath.schema});
-        } else {
-          error = schemaPath.doValidateSync(item);
-        }
+        const error = this.validatePathSync({...options, path, schemaPath: schema.paths[path]});
         if (error) {
           if (options.collect) errors.push([path, error]);
           else if (options.throw) throw error;
@@ -143,6 +137,32 @@ export class BaseM {
         if (options.throw) throw collected;
         else return collected;
       }
+    }
+  }
+
+  validatePathSync(options) {
+    const path = options.path;
+    const schema = options.schema || this.constructor.schema;
+    const schemaPath = options.schemaPath || this.getSchemaPath(path, schema);
+    if (!schemaPath) {
+      const error = new Error(`path ${path} not found in schema`);
+      error.path = path;
+      if (options.throw) throw error;
+      else return error;
+    }
+    const item = this.deepGetMaybe(path, options.object);
+    let error;
+    if (schemaPath.$isMongooseDocumentArray) {
+      // TODO: the path itself may have validations, like maybe being required
+      error = this._validateArraySync(item, schemaPath, options);
+    } else if (schemaPath.$isSingleNested) {
+      error = this.validateSync({...options, object: item, schema: schemaPath.schema});
+    } else {
+      error = schemaPath.doValidateSync(item);
+    }
+    if (error) {
+      if (options.throw) throw error;
+      else return error;
     }
   }
 
@@ -184,6 +204,42 @@ export class BaseM {
       const collected = new CompoundValidationError(errors);
       if (options.throw) throw collected;
       else return collected;
+    }
+  }
+
+  getSchemaPath(path, schema) {
+    if (schema.paths[path]) return schema.paths[path];
+    let missing = [];
+    const keyRe = /(.*)\[([^[]+)]$/;
+    for (let part of path.split(`.`)) {
+      const partsFound = [];
+      for (;;) {
+        const match = keyRe.exec(part);
+        if (match) {
+          part = match[1];
+          if (isNaN(match[2])) partsFound.unshift(JSON.parse(match[2]));
+          // discard array indexes because mongoose schemas don't work like that
+        } else {
+          partsFound.unshift(part);
+          missing = missing.concat(partsFound);
+        }
+      }
+    }
+    let currentSchema = schema;
+    outer: while (missing.length) {
+      const checking = missing;
+      missing = [];
+      while (checking.length) {
+        missing.unshift(checking.pop());
+        // XXX not sure how mongoose `paths` works with spaces etc, check
+        const candidatePath = checking.join(`.`);
+        if (currentSchema.paths[candidatePath]) {
+          currentSchema = currentSchema.paths[candidatePath];
+          continue outer;
+        }
+      }
+      // nothing found
+      return undefined;
     }
   }
 
