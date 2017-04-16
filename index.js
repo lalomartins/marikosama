@@ -42,34 +42,53 @@ export function model({schema, persistence, logic, options}) {
 export class BaseM extends EventEmitter {
   constructor(subject) {
     super();
+    const options = this.constructor.options;
     this.subject = subject;
-    if (this.constructor.options.accessors) {
+    if (options.accessors) {
       this[symbols.modelData] = {};
     }
-    if (this.constructor.options.linking) {
+    if (options.linking) {
       let linking;
       if (featureRegistry.has(`linking`)) {
-        if (typeof this.constructor.options.linking === `string`)
-          linking = featureRegistry.get(`linking`).get(this.constructor.options.linking);
+        if (typeof options.linking === `string`)
+          linking = featureRegistry.get(`linking`).get(options.linking);
         else
           linking = featureRegistry.get(`linking`).values().next().value;
       }
       if (linking && linking.initInstance) {
         linking.initInstance(this);
-      } else if (!linking && this.constructor.options.linking !== symbols.ifAvailable) {
+      } else if (!linking && options.linking !== symbols.ifAvailable) {
         console.error(`Mariko-Sama: linking requested but no implementation was imported`);
+      }
+    }
+    if (options.changeLog) {
+      const changeLog = featureRegistry.get(`changeLog`);
+      if (changeLog && changeLog.changeLogClass) {
+        this.changeLog = new changeLog.changeLogClass();
+        this.on(`update`, (path, value, current) => this.changeLog.add({path, value, current}));
+      } else if (options.changeLog !== symbols.ifAvailable) {
+        console.error(`Mariko-Sama: changeLog requested but the feature wasn't imported`);
       }
     }
   }
 
   static initClass(options) {
     this.options = {
+      // general options
       initialize: false,
+
+      // core (model) options
       validateOnCreation: true,
+      allowSettingThrough: false,
+
+      // features
       accessors: symbols.ifAvailable,
       linking: symbols.ifAvailable,
-      allowSettingThrough: false,
+      changeLog: symbols.ifAvailable,
+
+      // feature options
       proxyArrayProxy: true,
+
       ...options,
     };
     if (this.options.accessors) {
@@ -98,13 +117,15 @@ export class BaseM extends EventEmitter {
 
   static load(data) {
     const instance = new this.subjectClass();
-    instance.m.set(data);
+    instance.m.set(data, {noEmit: true});
     if (instance.m.initialize && this.options.initialize)
       instance.m.initialize();
+    if (this.options.validateOnCreation && data !== undefined)
+      instance.validateSync({throw: true});
     return instance;
   }
 
-  set(data) {
+  set(data, options = {}) {
     const M = this.constructor;
     const updates = {path: [], value: [], current: []};
     M.schema.eachPath((path, schemaPath) => {
@@ -118,9 +139,8 @@ export class BaseM extends EventEmitter {
         }
       }
     });
-    if (M.options.validateOnCreation && data !== undefined)
-      this.validateSync({throw: true});
-    if (updates.length) this.emit(`update`, [updates.path, updates.value, updates.current]);
+    if (updates.path.length && !options.noEmit)
+      this.emit(`update`, updates.path, updates.value, updates.current);
     return this;
   }
 
@@ -332,14 +352,14 @@ export class BaseM extends EventEmitter {
     }
   }
 
-  deepSetWithParents(path, value, {options}) {
+  deepSetWithParents(path, value, options) {
     for (;;) {
       try {
-        return this.deepSet(path, value);
+        return this.deepSet(path, value, options);
       } catch (error) {
         // XXX will blow up on arrays, I don't think it can happen with Mongoose schemas though
         if (error.fullPath && error.lastValid) {
-          this.rootM().deepSet(error.lastValid, {});
+          this.rootM().deepSet(error.lastValid, {}, {...options, noEmit: true});
         }
         else throw error;
       }

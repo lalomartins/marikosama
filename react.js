@@ -1,4 +1,5 @@
 import {Component} from 'react';
+import './changeLog';
 
 export class Watch extends Component {
   componentWillMount() {
@@ -15,7 +16,6 @@ export class Watch extends Component {
   }
 
   wrappedForceUpdate() {
-    console.debug(`Watch got event`, arguments);
     // This exists just to discard any arguments, to make sure we don't pass
     // anything odd do p?react in case they change the API in the future
     this.forceUpdate();

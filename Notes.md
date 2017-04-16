@@ -7,13 +7,18 @@
 
 ## TODO/WIP
 
-- mixed
 - hook up valuelink
+- react wrapping component for rerendering on changes
+- “changelog” option
+
+--- DONE ---
+
 - react HOC for notifying of changes (replacing nestedreact)
-  - the HOC keeps hold of the actual model, and passes a proxy to props; on changes, it creates a new proxy
-  - should provide an easy way to detect the changes… maybe a transactional option?
 - abstract persistence
 - react HOCs for single document and document listing/query
+  - the HOC keeps hold of the actual model, and passes a proxy to props; on changes, it creates a new proxy
   - do we want to handle paging? Search? Sort?
-- generic mongo persistence
+- mixed
+- transactional
+- generic pouch persistence
 - generic remote/restful api
