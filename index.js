@@ -370,4 +370,15 @@ export class BaseM extends EventEmitter {
     if (this.__proto__ instanceof this.constructor) return this.__proto__.rootM();
     else return this;
   }
+
+  // Wrapper for the changeLog method, same but returns false if the path reverted
+  // back to the old value.
+  changedSince(since, path) {
+    if (this.changeLog && this.changeLog.changedSince) {
+      const changed = this.changeLog.changedSince(since, path);
+      if (!(changed && changed.change)) return changed;
+      else if (changed.from !== this.deepGet(path)) return changed;
+      else return false;
+    } else return symbols.notAvailable;
+  }
 }

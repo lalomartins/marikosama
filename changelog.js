@@ -1,4 +1,5 @@
 import featureRegistry from './feature-registry';
+import symbols from './symbols';
 
 export class ChangeLog {
   constructor() {
@@ -39,12 +40,22 @@ export class ChangeLog {
   // Important: this returns whether or not there was at least one change, not
   // whether it *is* changed since then.
   changedSince(since, path) {
+    if (this.changes[0].id > since) {
+      // Changes have been cleared since then, so we have no way of knowing.
+      // Or rather, we can give definite positives, but false negatives, so
+      // better not try.
+      // As a side effect, this result evaluates as true in an if(), so user
+      // code can just do `if (m.changedSince(n)) update()` and it will usually
+      // do the right thing, even if wasting a few cpu cycles.
+      return symbols.notAvailable;
+    }
     for (const change of this.changes) {
       if (change.id > since) {
         const index = change.path.indexOf(path);
         if (index >= 0) return {change, from: change.current[index]};
       }
     }
+    return false;
   }
 
   add(change) {
