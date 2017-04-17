@@ -4,7 +4,7 @@ import symbols from './symbols';
 export class ChangeLog {
   constructor() {
     this.changes = [];
-    this.nextId = 0;
+    this.nextId = 1;
   }
 
   static get [Symbol.species]() {return ChangeLog}

@@ -62,6 +62,11 @@ export class ArrayProxyBase {
     return this[symbols.proxySelf].m.deepGet(this.basePath).unshift(value);
   }
 
+  // For passing to type-checking stuff (Array.isArray())
+  toArray() {
+    return new Array(...this);
+  }
+
   // TODO all Array methods pop, slice, etc
 }
 
