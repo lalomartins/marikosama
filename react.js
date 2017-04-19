@@ -122,7 +122,7 @@ class ModelManagerBase extends Component {
       const cache = this.cache.get(name);
       if (provider.initializeSync) {
         cache.object = provider.initializeSync(this.props);
-        cache.lastRevision = cache.object.changeLog.latest().id;
+        cache.lastRevision = cache.object.m.changeLog.latest().id;
       }
       if (cache.object && cache.object.m && cache.object.m.on)
         stateUpdate[name] = this.makeProxy(cache.object, cache);

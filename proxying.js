@@ -217,6 +217,9 @@ export function createAccessors(M, subjectClass, schema) {
       });
     }
   });
+  if (!subjectClass.prototype.toJSON) {
+    subjectClass.prototype.toJSON = function() {return this.m.getData()};
+  }
 }
 
 feature.createAccessors = createAccessors;

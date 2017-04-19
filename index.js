@@ -94,7 +94,7 @@ export class BaseM extends EventEmitter {
     if (this.options.accessors) {
       const proxying = featureRegistry.get(`proxying`);
       if (proxying && proxying.createAccessors) {
-        proxying.createAccessors(this, this.subjectClass, this.schema);
+        proxying.createAccessors(this);
       } else if (this.options.accessors !== symbols.ifAvailable) {
         console.error(`Mariko-Sama: proxying requested but the feature wasn't imported`);
       }
@@ -113,19 +113,39 @@ export class BaseM extends EventEmitter {
         console.error(`Mariko-Sama: linking requested but no implementation was imported`);
       }
     }
+    if (this.persistence && this.persistence.initClass) this.persistence.initClass(this);
   }
 
-  static load(data) {
+  rootM() {
+    if (this.__proto__ instanceof this.constructor) return this.__proto__.rootM();
+    else return this;
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // data handling (get, set, etc)
+
+  static load(data, options = {}) {
     const instance = new this.subjectClass();
-    instance.m.set(data, {noEmit: true});
+    instance.m.update(data, {noEmit: true});
     if (instance.m.initialize && this.options.initialize)
       instance.m.initialize();
-    if (this.options.validateOnCreation && data !== undefined)
+    if (this.options.validateOnCreation && !options.noValidation && data !== undefined)
       instance.validateSync({throw: true});
     return instance;
   }
 
-  set(data, options = {}) {
+  // get all the data, e.g. for serializing
+  getData(options = {}) {
+    // Maybe we need something more sophisticated? For now just trust user code
+    // not to mutate it
+    if (this.constructor.options.accessors) {
+      return this[symbols.modelData];
+    } else {
+      return this.subject;
+    }
+  }
+
+  update(data, options = {}) {
     const M = this.constructor;
     const updates = {path: [], value: [], current: []};
     M.schema.eachPath((path, schemaPath) => {
@@ -143,6 +163,143 @@ export class BaseM extends EventEmitter {
       this.emit(`update`, updates.path, updates.value, updates.current);
     return this;
   }
+
+  _deepGetMinusOne(path, parent) {
+    if (parent === undefined) {
+      if (this.constructor.options.accessors) {
+        parent = this[symbols.modelData];
+      } else {
+        parent = this.subject;
+      }
+      if (this.basePath) path = this.basePath + path;
+    }
+    if (typeof path !== `string`) return parent[path];
+    const re = /(?:\.?([a-zA-Z_$][\w$]*))|(?:\[([^\]]+)\])/gy;
+    let partial = parent;
+    let previousIndex = 0;
+    let lastId;
+    while (re.lastIndex < path.length) {
+      parent = partial;
+      previousIndex = re.lastIndex; // for the error message
+      const match = re.exec(path);
+      if (!match) throw makeDeepGetError(path, path.substr(previousIndex));
+      const [text, attr, index] = match;
+      if (partial === undefined) {
+        const error = new TypeError(`Cannot read path ${text} of undefined ${path.substr(0, previousIndex)}`);
+        error.fullPath = path;
+        error.lastValid = path.substr(0, previousIndex);
+        error.firstInvalid = attr || index;
+        error.currentPath = path.substr(0, re.lastIndex);
+        throw error;
+      }
+      if (attr !== undefined) {
+        lastId = attr;
+        partial = partial[attr];
+      } else if (index !== undefined) {
+        try {
+          lastId = JSON.parse(index);
+        } catch (e) {
+          throw makeDeepGetError(path, index);
+        }
+        partial = partial[lastId];
+      } else {
+        // not sure how this would happen but…
+        throw makeDeepGetError(path, text);
+      }
+
+      if (partial && partial._deepGetMinusOne && re.lastIndex < path.length)
+        try {
+          return partial._deepGetMinusOne(path.substr(re.lastIndex));
+        } catch (e) {
+          throw makeDeepGetError(path, e);
+        }
+    }
+    return [parent, partial, lastId];
+  }
+
+  deepGet(path, parent) {
+    return this._deepGetMinusOne(path, parent)[1];
+  }
+
+  deepGetMaybe(path, parent) {
+    try {
+      return this.deepGet(path, parent);
+    } catch (error) {
+      if (error.fullPath === path) return undefined;
+      else throw error;
+    }
+  }
+
+  deepSet(path, value, options = {}) {
+    // TODO validate
+    const [parent, current, lastIdentifier] = this._deepGetMinusOne(path);
+    if (value != null)
+      while (value.hasOwnProperty(symbols.proxySelf)) value = value[symbols.proxySelf];
+    if (current !== value) {
+      if (current !== undefined && current.update) current.update(value);
+      else if (parent.deepSet) parent.deepSet(lastIdentifier, value);
+      else if (typeof lastIdentifier === `string` || typeof lastIdentifier === `number`) parent[lastIdentifier] = value;
+      else throw makeDeepGetError(path, lastIdentifier);
+      if (options.noEmit) return {path, value, current};
+      else this.emit(`update`, path, value, current);
+    }
+  }
+
+  deepSetWithParents(path, value, options) {
+    for (;;) {
+      try {
+        return this.deepSet(path, value, options);
+      } catch (error) {
+        // XXX will blow up on arrays, I don't think it can happen with Mongoose schemas though
+        if (error.fullPath && error.lastValid) {
+          this.rootM().deepSet(error.lastValid, {}, {...options, noEmit: true});
+        }
+        else throw error;
+      }
+    }
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // schemas
+
+  getSchemaPath(path, schema) {
+    if (schema.paths[path]) return schema.paths[path];
+    let missing = [];
+    const keyRe = /(.*)\[([^[]+)]$/;
+    for (let part of path.split(`.`)) {
+      const partsFound = [];
+      for (;;) {
+        const match = keyRe.exec(part);
+        if (match) {
+          part = match[1];
+          if (isNaN(match[2])) partsFound.unshift(JSON.parse(match[2]));
+          // discard array indexes because mongoose schemas don't work like that
+        } else {
+          partsFound.unshift(part);
+          missing = missing.concat(partsFound);
+        }
+      }
+    }
+    let currentSchema = schema;
+    outer: while (missing.length) {
+      const checking = missing;
+      missing = [];
+      while (checking.length) {
+        missing.unshift(checking.pop());
+        // XXX not sure how mongoose `paths` works with spaces etc, check
+        const candidatePath = checking.join(`.`);
+        if (currentSchema.paths[candidatePath]) {
+          currentSchema = currentSchema.paths[candidatePath];
+          continue outer;
+        }
+      }
+      // nothing found
+      return undefined;
+    }
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // validation
 
   // TODO this is the mongoose implementation, decouple
   // We could just move it wholesale to mongoose.js but I feel there might be some
@@ -236,140 +393,8 @@ export class BaseM extends EventEmitter {
     }
   }
 
-  getSchemaPath(path, schema) {
-    if (schema.paths[path]) return schema.paths[path];
-    let missing = [];
-    const keyRe = /(.*)\[([^[]+)]$/;
-    for (let part of path.split(`.`)) {
-      const partsFound = [];
-      for (;;) {
-        const match = keyRe.exec(part);
-        if (match) {
-          part = match[1];
-          if (isNaN(match[2])) partsFound.unshift(JSON.parse(match[2]));
-          // discard array indexes because mongoose schemas don't work like that
-        } else {
-          partsFound.unshift(part);
-          missing = missing.concat(partsFound);
-        }
-      }
-    }
-    let currentSchema = schema;
-    outer: while (missing.length) {
-      const checking = missing;
-      missing = [];
-      while (checking.length) {
-        missing.unshift(checking.pop());
-        // XXX not sure how mongoose `paths` works with spaces etc, check
-        const candidatePath = checking.join(`.`);
-        if (currentSchema.paths[candidatePath]) {
-          currentSchema = currentSchema.paths[candidatePath];
-          continue outer;
-        }
-      }
-      // nothing found
-      return undefined;
-    }
-  }
-
-  _deepGetMinusOne(path, parent) {
-    if (parent === undefined) {
-      if (this.constructor.options.accessors) {
-        parent = this[symbols.modelData];
-      } else {
-        parent = this.subject;
-      }
-      if (this.basePath) path = this.basePath + path;
-    }
-    if (typeof path !== `string`) return parent[path];
-    const re = /(?:\.?([a-zA-Z_$][\w$]*))|(?:\[([^\]]+)\])/gy;
-    let partial = parent;
-    let previousIndex = 0;
-    let lastId;
-    while (re.lastIndex < path.length) {
-      parent = partial;
-      previousIndex = re.lastIndex; // for the error message
-      const match = re.exec(path);
-      if (!match) throw makeDeepGetError(path, path.substr(previousIndex));
-      const [text, attr, index] = match;
-      if (partial === undefined) {
-        const error = new TypeError(`Cannot read path ${text} of undefined ${path.substr(0, previousIndex)}`);
-        error.fullPath = path;
-        error.lastValid = path.substr(0, previousIndex);
-        error.firstInvalid = attr || index;
-        error.currentPath = path.substr(0, re.lastIndex);
-        throw error;
-      }
-      if (attr !== undefined) {
-        lastId = attr;
-        partial = partial[attr];
-      } else if (index !== undefined) {
-        try {
-          lastId = JSON.parse(index);
-        } catch (e) {
-          throw makeDeepGetError(path, index);
-        }
-        partial = partial[lastId];
-      } else {
-        // not sure how this would happen but…
-        throw makeDeepGetError(path, text);
-      }
-
-      if (partial && partial._deepGetMinusOne && re.lastIndex < path.length)
-        try {
-          return partial._deepGetMinusOne(path.substr(re.lastIndex));
-        } catch (e) {
-          throw makeDeepGetError(path, e);
-        }
-    }
-    return [parent, partial, lastId];
-  }
-
-  deepGet(path, parent) {
-    return this._deepGetMinusOne(path, parent)[1];
-  }
-
-  deepGetMaybe(path, parent) {
-    try {
-      return this.deepGet(path, parent);
-    } catch (error) {
-      if (error.fullPath === path) return undefined;
-      else throw error;
-    }
-  }
-
-  deepSet(path, value, options = {}) {
-    // TODO validate
-    const [parent, current, lastIdentifier] = this._deepGetMinusOne(path);
-    while (value.hasOwnProperty(symbols.proxySelf)) value = value[symbols.proxySelf];
-    if (current !== value) {
-      if (current !== undefined && current.set) current.set(value);
-      else if (parent.deepSet) parent.deepSet(lastIdentifier, value);
-      else if (typeof lastIdentifier === `string` || typeof lastIdentifier === `number`) parent[lastIdentifier] = value;
-      else throw makeDeepGetError(path, lastIdentifier);
-      if (options.noEmit) return {path, value, current};
-      else this.emit(`update`, path, value, current);
-    }
-  }
-
-  deepSetWithParents(path, value, options) {
-    for (;;) {
-      try {
-        return this.deepSet(path, value, options);
-      } catch (error) {
-        // XXX will blow up on arrays, I don't think it can happen with Mongoose schemas though
-        if (error.fullPath && error.lastValid) {
-          this.rootM().deepSet(error.lastValid, {}, {...options, noEmit: true});
-        }
-        else throw error;
-      }
-    }
-  }
-
-  rootM() {
-    if (this.__proto__ instanceof this.constructor) return this.__proto__.rootM();
-    else return this;
-  }
+  /////////////////////////////////////////////////////////////////////////////
+  // changeLog
 
   // Wrapper for the changeLog method, same but returns false if the path reverted
   // back to the old value.
@@ -381,4 +406,13 @@ export class BaseM extends EventEmitter {
       else return false;
     } else return symbols.notAvailable;
   }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // persistence
+  static get(id, options) {return this.persistence.get(this, id, options)}
+  static query(options) {return this.persistence.query(this, options)}
+  reload(options) {return this.constructor.persistence.reload(this, options)}
+  save(options) {return this.constructor.persistence.save(this, options)}
+  saveIfChanged(options) {return this.constructor.persistence.saveIfChanged(this, options)}
+  isChangedFromPersistence() {return this.constructor.persistence.isChanged(this)}
 }
