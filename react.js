@@ -147,9 +147,40 @@ class ModelManagerBase extends Component {
     }
   }
 
-  // TODO receive props; not really part of the use case ATM
-  // (or is it? Does the router just change props if we navigate to the same route
-  // but different params?)
+  componentWillReceiveProps(nextProps) {
+    const stateUpdate = {};
+    const needHandlers = [];
+    for (const name of Object.getOwnPropertyNames(this.constructor.providers)) {
+      const provider = this.constructor.providers[name];
+      const cache = this.cache.get(name);
+      if (provider.updateSync) {
+        const providerUpdate = provider.updateSync(this.props, nextProps);
+        if (providerUpdate && providerUpdate.update) {
+          if (cache.object && cache.object.m && cache.object.m.on)
+            cache.object.m.removeListener(`update`, cache.handler);
+          cache.object = providerUpdate.object;
+          cache.lastRevision = cache.object.m.changeLog.latest().id;
+          if (cache.object && cache.object.m && cache.object.m.on) {
+            stateUpdate[name] = this.makeProxy(cache.object, cache);
+            needHandlers.push([cache.object, cache.handler]);
+          } else
+            stateUpdate[name] = cache.object;
+        }
+      }
+    }
+    this.setState(stateUpdate);
+    for (const [object, handler] of needHandlers)
+      object.m.on(`update`, handler);
+    for (const name of Object.getOwnPropertyNames(this.constructor.providers)) {
+      const provider = this.constructor.providers[name];
+      if (provider.update)
+        provider.update(this.props, nextProps).then((providerUpdate) => {
+          if (providerUpdate && providerUpdate.update)
+            this.replace(name, providerUpdate.object);
+        });
+    }
+  }
+
 
   render() {
     const providerProps = {};
