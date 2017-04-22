@@ -87,10 +87,17 @@ class ModelManagerBase extends Component {
 
   replace(name, object) {
     const oldCache = this.cache.get(name);
-    if (oldCache && oldCache.object && oldCache.object.m && oldCache.object.m.on) {
-      oldCache.object.m.removeListener(`update`, oldCache.handler);
+    if (oldCache && oldCache.object) {
+      if (oldCache.object.m && oldCache.object.m.on) {
+        oldCache.object.m.removeListener(`update`, oldCache.handler);
+      } else if (oldCache.object.on) {
+        oldCache.object.removeListener(`update`, oldCache.handler);
+      }
+      if (this.constructor.providers[name].dispose) {
+        this.constructor.providers[name].dispose(oldCache.object);
+      }
     }
-    const lastRevision = object.m.changeLog.latest();
+    const lastRevision = object.m && object.m.changeLog && object.m.changeLog.latest();
     const newCache = {
       lastRevision: lastRevision ? lastRevision.id : 0,
       object,
@@ -101,6 +108,8 @@ class ModelManagerBase extends Component {
       object.m.on(`update`, newCache.handler);
       this.setState({[name]: this.makeProxy(object, newCache)});
     } else {
+      if (object.on)
+        object.on(`update`, newCache.handler);
       this.setState({[name]: object});
     }
   }
@@ -109,9 +118,13 @@ class ModelManagerBase extends Component {
   handleUpdate(name) {
     const cache = this.cache.get(name);
     // Sanity check / debounce
-    if (cache.object.m.changeLog.latest().id > cache.lastRevision) {
-      cache.lastRevision = cache.object.m.changeLog.latest().id;
-      this.setState({[name]: this.makeProxy(cache.object, cache)});
+    if (cache.object && cache.object.m && cache.object.m.changeLog) {
+      if (cache.object.m.changeLog.latest().id > cache.lastRevision) {
+        cache.lastRevision = cache.object.m.changeLog.latest().id;
+        this.setState({[name]: this.makeProxy(cache.object, cache)});
+      }
+    } else {
+      this.setState({[name]: cache.object});
     }
   }
 
@@ -135,15 +148,23 @@ class ModelManagerBase extends Component {
       const cache = this.cache.get(name);
       if (cache.object && cache.object.m && cache.object.m.on)
         cache.object.m.on(`update`, cache.handler);
+      else if (cache.object.on)
+        cache.object.on(`update`, cache.handler);
       if (provider.initialize)
         provider.initialize(this.props).then((object) => this.replace(name, object));
     }
   }
 
   componentWillUnmount() {
-    for (const cache of this.cache.values()) {
-      if (cache.object && cache.object.m && cache.object.m.on)
-        cache.object.m.removeListener(`update`, cache.handler);
+    for (const [name, cache] of this.cache.entries()) {
+      if (cache.object) {
+        if (cache.object.m && cache.object.m.on)
+          cache.object.m.removeListener(`update`, cache.handler);
+        else if (cache.object.on)
+          cache.object.removeListener(`update`, cache.handler);
+        if (this.constructor.providers[name].dispose)
+          this.constructor.providers[name].dispose(cache.object);
+      }
     }
   }
 
@@ -162,15 +183,18 @@ class ModelManagerBase extends Component {
           cache.lastRevision = cache.object.m.changeLog.latest().id;
           if (cache.object && cache.object.m && cache.object.m.on) {
             stateUpdate[name] = this.makeProxy(cache.object, cache);
-            needHandlers.push([cache.object, cache.handler]);
-          } else
+            needHandlers.push([cache.object.m, cache.handler]);
+          } else {
+            if (cache.object.on)
+              needHandlers.push([cache.object, cache.handler]);
             stateUpdate[name] = cache.object;
+          }
         }
       }
     }
     this.setState(stateUpdate);
-    for (const [object, handler] of needHandlers)
-      object.m.on(`update`, handler);
+    for (const [emitter, handler] of needHandlers)
+      emitter.on(`update`, handler);
     for (const name of Object.getOwnPropertyNames(this.constructor.providers)) {
       const provider = this.constructor.providers[name];
       if (provider.update)
@@ -195,3 +219,4 @@ class ModelManagerBase extends Component {
 }
 
 export const notFound = symbols.notAvailable;
+export const loading = symbols.loading;

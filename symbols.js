@@ -5,5 +5,6 @@ export const symbols = {
   proxyStructure: Symbol(`proxyStructure`),
   ifAvailable: Symbol(`ifAvailable`),
   notAvailable: Symbol(`notAvailable`),
+  loading: Symbol(`loading`),
 };
 export default symbols;

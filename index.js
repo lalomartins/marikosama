@@ -411,6 +411,7 @@ export class BaseM extends EventEmitter {
   // persistence
   static get(id, options) {return this.persistence.get(this, id, options)}
   static query(options) {return this.persistence.query(this, options)}
+  static queryReactive(options) {return this.persistence.queryReactive(this, options)}
   reload(options) {return this.constructor.persistence.reload(this, options)}
   save(options) {return this.constructor.persistence.save(this, options)}
   saveIfChanged(options) {return this.constructor.persistence.saveIfChanged(this, options)}
