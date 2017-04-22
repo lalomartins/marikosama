@@ -124,6 +124,7 @@ class ModelManagerBase extends Component {
         this.setState({[name]: this.makeProxy(cache.object, cache)});
       }
     } else {
+      // this works in preact but probably not in react
       this.setState({[name]: cache.object});
     }
   }
