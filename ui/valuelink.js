@@ -1,6 +1,7 @@
-import featureRegistry from './feature-registry';
 import Link from 'valuelink';
-import symbols from './symbols';
+
+import featureRegistry from '../feature-registry';
+import symbols from '../symbols';
 
 symbols.valueLinkCache = Symbol(`valueLinkCache`);
 
