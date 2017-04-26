@@ -3,14 +3,16 @@
   "version": "0.0.1",
   "description": "A model system for db-centric webapps",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "scripts": {},
   "keywords": [
     "model",
     "mvc",
     "webapp"
   ],
+  "repository" : "lalomartins/marikosama",
+  "bugs": {
+    "url": "https://github.com/lalomartins/marikosama/issues"
+  },
   "author": "Lalo Martins <lalo.martins@gmail.com>",
   "license": "MIT",
   "dependencies": {

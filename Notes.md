@@ -13,7 +13,7 @@
 - react HOC for notifying of changes (replacing nestedreact)
 - abstract persistence
 
---- DONE ---
+--- ↑ DONE ↑ ---
 
 - react HOCs for single document and document listing/query
   - the HOC keeps hold of the actual model, and passes a proxy to props; on changes, it creates a new proxy
