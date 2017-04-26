@@ -35,7 +35,7 @@ I want to easily bind model fields to form controls. Fortunately, the library th
 
 ### Idiomatic React
 
-I want to wrap my components with higher-order components, Redux-style, to get model data as painlessly as possible. 
+I want to wrap my components with higher-order components, Redux-style, to get model data as painlessly as possible.
 
 At the same time, I want to be able to easily set model properties, and get React to do its thing and react appropriately to the changes.
 
@@ -60,6 +60,8 @@ It will work with, if installed and if the corresponding submodules are manually
 
 (Yes, I know about `peerDependencies`, but I don't want you to get warnings if you don't have them. They're really, really optional; only needed if the corresponding submodule is imported.)
 
+… or so I'd like to say, but due to the sad state of the moving target that is the js/es toolchain, we do need to depend on some Babel stuff. YMMV.
+
 ## Documentation
 
 Yeah right.
@@ -68,4 +70,4 @@ Let's wait for at least 0.1 and the APIs to take some level of shape…
 
 ## Installing
 
-Use the git repo for now; npm release won't be before 0.1. `npm i --save "lalomartins/marikosama#v0.0.1"`
+Use the git repo for now; npm release won't be before 0.1. `npm i --save "lalomartins/marikosama#v0.0.2"`

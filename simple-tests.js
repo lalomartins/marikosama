@@ -1,3 +1,5 @@
+// to run or import this you need
+//    "babel-plugin-transform-decorators-legacy": "^1.3.0"
 import * as marikosama from 'marikosama';
 import featureRegistry from './feature-registry';
 import {Schema} from 'marikosama/schemas/mongoose';
