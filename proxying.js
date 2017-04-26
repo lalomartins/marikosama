@@ -170,7 +170,7 @@ export function createAccessors(M, subjectClass, schema) {
             this[symbols.proxySelf].m.deepSet(`${partial}.${tail}`, value);
         },
       });
-    } else if (schemaPath.$isMongooseDocumentArray || schemaPath.constructor.name === `SchemaArray`) {
+    } else if (schemaPath.$isMongooseDocumentArray || schemaPath.instance === `Array`) {
       class ArrayProxy extends ArrayProxyBase {}
       if (schemaPath.$isMongooseDocumentArray) {
         class NestedProxy extends NestedProxyBase {}
