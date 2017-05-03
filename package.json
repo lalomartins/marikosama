@@ -1,9 +1,13 @@
 {
   "name": "marikosama",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A model system for db-centric webapps",
   "main": "index.js",
-  "scripts": {},
+  "scripts": {
+    "build": "./node_modules/.bin/babel -d m src",
+    "prepare": "npm run build"
+  },
+  "main": "m/index.js",
   "keywords": [
     "model",
     "mvc",
