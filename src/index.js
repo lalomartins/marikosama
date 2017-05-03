@@ -247,7 +247,7 @@ export class BaseM extends EventEmitter {
       else if (typeof lastIdentifier === `string` || typeof lastIdentifier === `number`) parent[lastIdentifier] = value;
       else throw makeDeepGetError(path, lastIdentifier);
       if (options.noEmit) return {path, value, current};
-      else this.emit(`update`, path, value, current);
+      else this.emit(`update`, (this.basePath || ``) + path, value, current);
     }
   }
 
