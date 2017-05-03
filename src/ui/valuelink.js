@@ -47,9 +47,10 @@ const implementation = {
 
       deepLink(path, validate) {
         // console.debug(`getting deep link for ${path} in`, this, `, current value is`, this.deepGet(path));
-        if (this[symbols.valueLinkCache].has(path)) return this[symbols.valueLinkCache].get(path);
+        const fullPath = this.basePath ? this.basePath + path : path;
+        if (this[symbols.valueLinkCache].has(fullPath)) return this[symbols.valueLinkCache].get(fullPath);
         const link = new MarikoLink(this, path);
-        this[symbols.valueLinkCache].set(path, link);
+        this[symbols.valueLinkCache].set(fullPath, link);
         if (validate) link.validate();
         return link;
       },
