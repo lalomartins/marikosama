@@ -114,6 +114,12 @@ export class BaseM extends EventEmitter {
       }
     }
     if (this.persistence && this.persistence.initClass) this.persistence.initClass(this);
+    if (this.subjectClass.prototype.toJSON === undefined)
+      this.subjectClass.prototype.toJSON = function toJSON() {
+        const data = this.m.getData();
+        if (data.toJSON) return data.toJSON();
+        else return data;
+      }
   }
 
   rootM() {
