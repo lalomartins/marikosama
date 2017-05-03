@@ -52,6 +52,19 @@ export class ArrayProxyBase {
       yield [index, this.makeItemProxy(index, value)];
   }
 
+  map(fn) {
+    const results = [];
+    for (const proxy of this) results.push(fn(proxy));
+    return results;
+  }
+
+  filter(fn) {
+    const results = [];
+    for (const proxy of this)
+      if (fn(proxy)) results.push(proxy);
+    return results;
+  }
+
   push(value) {
     while (value.hasOwnProperty(symbols.proxySelf)) value = value[symbols.proxySelf];
     return this[symbols.proxySelf].m.deepGet(this.basePath).push(value);
