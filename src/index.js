@@ -270,6 +270,10 @@ export class BaseM extends EventEmitter {
 
   getSchemaPath(path, schema) {
     if (schema.paths[path]) return schema.paths[path];
+    if (this.basePath) {
+      path = this.basePath + path;
+      if (schema.paths[path]) return schema.paths[path];
+    }
     let missing = [];
     const keyRe = /(.*)\[([^[]+)]$/;
     for (let part of path.split(`.`)) {
@@ -283,6 +287,7 @@ export class BaseM extends EventEmitter {
         } else {
           partsFound.unshift(part);
           missing = missing.concat(partsFound);
+          break;
         }
       }
     }
