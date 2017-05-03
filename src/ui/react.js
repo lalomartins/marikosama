@@ -1,6 +1,6 @@
 import React, {Component} from 'react';
 import symbols from '../symbols';
-import '../changeLog';
+import '../changelog';
 
 export class Watch extends Component {
   componentWillMount() {
