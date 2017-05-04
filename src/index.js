@@ -213,9 +213,9 @@ export class BaseM extends EventEmitter {
         throw makeDeepGetError(path, text);
       }
 
-      if (partial && partial._deepGetMinusOne && re.lastIndex < path.length)
+      if (partial && partial.m && partial.m._deepGetMinusOne && re.lastIndex < path.length)
         try {
-          return partial._deepGetMinusOne(path.substr(re.lastIndex));
+          return partial.m._deepGetMinusOne(path.substr(re.lastIndex), partial);
         } catch (e) {
           throw makeDeepGetError(path, e);
         }
