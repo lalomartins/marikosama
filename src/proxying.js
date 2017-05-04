@@ -65,14 +65,24 @@ export class ArrayProxyBase {
     return results;
   }
 
-  push(value) {
+  push(value, options={}) {
     while (value.hasOwnProperty(symbols.proxySelf)) value = value[symbols.proxySelf];
-    return this[symbols.proxySelf].m.deepGet(this.basePath).push(value);
+    const self = this[symbols.proxySelf].m.deepGet(this.basePath);
+    const current = options.noEmit ? null : self.slice();
+    const res = self.push(value);
+    if (!options.noEmit)
+      this[symbols.proxySelf].m.emit(`update`, (this.basePath), self, current);
+    return res;
   }
 
-  unshift(value) {
+  unshift(value, options={}) {
     while (value.hasOwnProperty(symbols.proxySelf)) value = value[symbols.proxySelf];
-    return this[symbols.proxySelf].m.deepGet(this.basePath).unshift(value);
+    const self = this[symbols.proxySelf].m.deepGet(this.basePath);
+    const current = options.noEmit ? null : self.slice();
+    const res = self.unshift(value);
+    if (!options.noEmit)
+      this[symbols.proxySelf].m.emit(`update`, (this.basePath), self, current);
+    return res;
   }
 
   // For passing to type-checking stuff (Array.isArray())
