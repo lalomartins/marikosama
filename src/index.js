@@ -427,4 +427,5 @@ export class BaseM extends EventEmitter {
   save(options) {return this.constructor.persistence.save(this, options)}
   saveIfChanged(options) {return this.constructor.persistence.saveIfChanged(this, options)}
   isChangedFromPersistence() {return this.constructor.persistence.isChanged(this)}
+  remove(options) {return this.constructor.persistence.remove(this, options)}
 }
