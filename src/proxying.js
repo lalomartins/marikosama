@@ -90,6 +90,14 @@ export class ArrayProxyBase {
     return new Array(...this);
   }
 
+  slice(begin = 0, end) {
+    if (end === undefined) end = this.length;
+    const res = [];
+    for (let i = begin; i < end; i++)
+      res.push(this.get(i));
+    return res;
+  }
+
   // TODO all Array methods pop, slice, etc
 }
 
