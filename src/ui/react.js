@@ -125,7 +125,8 @@ class ModelManagerBase extends Component {
       }
     } else {
       // this works in preact but probably not in react
-      this.setState({[name]: cache.object});
+      // this.setState({[name]: cache.object});
+      this.forceUpdate();
     }
   }
 
