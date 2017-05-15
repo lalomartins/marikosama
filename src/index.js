@@ -301,6 +301,7 @@ export class BaseM extends EventEmitter {
         const candidatePath = checking.join(`.`);
         if (currentSchema.paths[candidatePath]) {
           currentSchema = currentSchema.paths[candidatePath];
+          if (currentSchema.schema) currentSchema = currentSchema.schema;
           continue outer;
         }
       }
