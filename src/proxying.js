@@ -214,7 +214,7 @@ export function createAccessors(M, subjectClass, schema) {
           if (M.options.proxyArrayProxy && BuiltinProxy !== symbols.notAvailable)
             proxy = proxyArrayProxy(proxy);
           Object.defineProperty(this, path, {
-            get: () => proxy,
+            get: () => (this.m && this.m.deepGet(path)) ? proxy : undefined,
             set: basicSetter(path),
             __proto__: null,
           });
@@ -230,7 +230,7 @@ export function createAccessors(M, subjectClass, schema) {
         get() {
           const proxy = new NestedProxy(this, path);
           Object.defineProperty(this, path, {
-            get: () => proxy,
+            get: () => (this.m && this.m.deepGet(path)) ? proxy : undefined,
             set: basicSetter(path),
             __proto__: null,
           });
