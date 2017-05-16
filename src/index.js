@@ -154,7 +154,7 @@ export class BaseM extends EventEmitter {
   update(data, options = {}) {
     const M = this.constructor;
     const updates = {path: [], value: [], current: []};
-    M.schema.eachPath((path, schemaPath) => {
+    M.schemaImplementation.eachPath(M.schema, (path, pathSchema) => {
       const value = this.deepGetMaybe(path, data);
       if (value !== undefined) {
         const update = this.deepSetWithParents(path, value, {noEmit: true});
@@ -266,64 +266,17 @@ export class BaseM extends EventEmitter {
   }
 
   /////////////////////////////////////////////////////////////////////////////
-  // schemas
-
-  getSchemaPath(path, schema) {
-    if (schema.paths[path]) return schema.paths[path];
-    if (this.basePath) {
-      path = this.basePath + path;
-      if (schema.paths[path]) return schema.paths[path];
-    }
-    let missing = [];
-    const keyRe = /(.*)\[([^[]+)]$/;
-    for (let part of path.split(`.`)) {
-      const partsFound = [];
-      for (;;) {
-        const match = keyRe.exec(part);
-        if (match) {
-          part = match[1];
-          if (isNaN(match[2])) partsFound.unshift(JSON.parse(match[2]));
-          // discard array indexes because mongoose schemas don't work like that
-        } else {
-          partsFound.unshift(part);
-          missing = missing.concat(partsFound);
-          break;
-        }
-      }
-    }
-    let currentSchema = schema;
-    outer: while (missing.length) {
-      const checking = missing;
-      missing = [];
-      while (checking.length) {
-        missing.unshift(checking.pop());
-        // XXX not sure how mongoose `paths` works with spaces etc, check
-        const candidatePath = checking.join(`.`);
-        if (currentSchema.paths[candidatePath]) {
-          currentSchema = currentSchema.paths[candidatePath];
-          if (currentSchema.schema) currentSchema = currentSchema.schema;
-          continue outer;
-        }
-      }
-      // nothing found
-      return undefined;
-    }
-  }
-
-  /////////////////////////////////////////////////////////////////////////////
   // validation
 
   // TODO this is the mongoose implementation, decouple
-  // We could just move it wholesale to mongoose.js but I feel there might be some
-  // core functionality that could stay here, so maybe postpone decoupling until
-  // we have another schema implementation to better know the requirements
   validateSync(options = {}) {
+    const {schemaImplementation} = this.constructor;
     const schema = options.schema || this.constructor.schema;
     if (schema) {
       const errors = [];
-      // not schema.eachPath() so that we can return partway
-      for (const path of Object.getOwnPropertyNames(schema.paths)) {
-        const error = this.validatePathSync({...options, path, schemaPath: schema.paths[path]});
+      // not eachPath() so that we can return partway
+      for (const {path, pathSchema} of schemaImplementation.getPaths()) {
+        const error = schemaImplementation.validatePathSync(this, {...options, path, pathSchema});
         if (error) {
           if (options.collect) errors.push([path, error]);
           else if (options.throw) throw error;
@@ -339,29 +292,7 @@ export class BaseM extends EventEmitter {
   }
 
   validatePathSync(options) {
-    const path = options.path;
-    const schema = options.schema || this.constructor.schema;
-    const schemaPath = options.schemaPath || this.getSchemaPath(path, schema);
-    if (!schemaPath) {
-      const error = new Error(`path ${path} not found in schema`);
-      error.path = path;
-      if (options.throw) throw error;
-      else return error;
-    }
-    const item = this.deepGetMaybe(path, options.object);
-    let error;
-    if (schemaPath.$isMongooseDocumentArray) {
-      // TODO: the path itself may have validations, like maybe being required
-      error = this._validateArraySync(item, schemaPath, options);
-    } else if (schemaPath.$isSingleNested) {
-      error = this.validateSync({...options, object: item, schema: schemaPath.schema});
-    } else {
-      error = schemaPath.doValidateSync(item);
-    }
-    if (error) {
-      if (options.throw) throw error;
-      else return error;
-    }
+    return this.constructor.schemaImplementation.validatePathSync(this, options);
   }
 
   validate(options = {}, callback) {
@@ -380,29 +311,6 @@ export class BaseM extends EventEmitter {
       if (error) reject(error);
       else resolve();
     });
-  }
-
-  _validateArraySync(array, schemaPath, options) {
-    const errors = [];
-    let error = schemaPath.constructor.prototype.__proto__.doValidateSync.call(schemaPath, array);
-    if (error) {
-      if (options.collect) errors.push([schemaPath.path, error]);
-      else if (options.throw) throw error;
-      else return error;
-    }
-    for (const [index, object] of array.entries()) {
-      error = this.validateSync({...options, schema: schemaPath.schema, object});
-      if (error) {
-        if (options.collect) errors.push([index, error]);
-        else if (options.throw) throw error;
-        else return error;
-      }
-    }
-    if (errors.length) {
-      const collected = new CompoundValidationError(errors);
-      if (options.throw) throw collected;
-      else return collected;
-    }
   }
 
   /////////////////////////////////////////////////////////////////////////////

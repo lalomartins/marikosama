@@ -125,6 +125,7 @@ export class NestedProxyBase {
   }
 }
 
+// TODO decouple from Mongoose schema implementation (somehow)
 export function createAccessors(M, subjectClass, schema) {
   if (subjectClass === undefined) subjectClass = M.subjectClass;
   if (schema === undefined) schema = M.schema;
