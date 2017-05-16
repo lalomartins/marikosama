@@ -92,6 +92,7 @@ export class BaseM extends EventEmitter {
       ...options,
     };
     if (this.options.accessors) {
+      this[symbols.subObjectClasses] = {};
       const proxying = featureRegistry.get(`proxying`);
       if (proxying && proxying.createAccessors) {
         proxying.createAccessors(this);
@@ -239,8 +240,10 @@ export class BaseM extends EventEmitter {
   deepSet(path, value, options = {}) {
     // TODO validate
     const [parent, current, lastIdentifier] = this._deepGetMinusOne(path);
-    if (value != null)
+    if (value != null) {
       while (value.hasOwnProperty(symbols.proxySelf)) value = value[symbols.proxySelf];
+      if (value.m && value.m instanceof BaseM) value = value.toJSON();
+    }
     if (current !== value) {
       if (current !== undefined && current.update) current.update(value);
       else if (parent.deepSet) parent.deepSet(lastIdentifier, value);
@@ -269,11 +272,23 @@ export class BaseM extends EventEmitter {
   // creating data
 
   createSubObject(path) {
-    return this.constructor.schemaImplementation.create(path, this.constructor.schema, this.basePath);
+    const M = this.constructor;
+    const fullPath = (this.basePath || ``) + path;
+    if (!M[symbols.subObjectClasses][fullPath]) {
+      const subSchema = M.schemaImplementation.getPathSchema(path, M.schema, this.basePath);
+      const theClass = M[symbols.subObjectClasses][fullPath] = class SubObject {};
+      model({
+        schema: subSchema.schema ? subSchema.schema : subSchema,
+        options: M.options,
+      })(theClass);
+      theClass.M.parentM = M;
+    }
+    const object = M.schemaImplementation.create(path, M.schema, this.basePath);
+    return M[symbols.subObjectClasses][fullPath].M.load(object);
   }
 
   static create() {
-    return this.schemaImplementation.create(this.schema);
+    return this.load(this.schemaImplementation.create(this.schema));
   }
 
   /////////////////////////////////////////////////////////////////////////////

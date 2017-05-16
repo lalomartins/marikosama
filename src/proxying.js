@@ -1,5 +1,6 @@
 import featureRegistry from './feature-registry';
 import symbols from './symbols';
+import {BaseM} from './index';
 
 if (!featureRegistry.has(`proxying`)) featureRegistry.set(`proxying`, {});
 const feature = featureRegistry.get(`proxying`);
@@ -67,6 +68,7 @@ export class ArrayProxyBase {
 
   push(value, options={}) {
     while (value.hasOwnProperty(symbols.proxySelf)) value = value[symbols.proxySelf];
+    if (value.m && value.m instanceof BaseM) value = value.toJSON();
     const self = this[symbols.proxySelf].m.deepGet(this.basePath);
     const current = options.noEmit ? null : self.slice();
     const res = self.push(value);
@@ -77,6 +79,7 @@ export class ArrayProxyBase {
 
   unshift(value, options={}) {
     while (value.hasOwnProperty(symbols.proxySelf)) value = value[symbols.proxySelf];
+    if (value.m && value.m instanceof BaseM) value = value.toJSON();
     const self = this[symbols.proxySelf].m.deepGet(this.basePath);
     const current = options.noEmit ? null : self.slice();
     const res = self.unshift(value);
