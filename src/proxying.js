@@ -92,6 +92,7 @@ export class ArrayProxyBase {
 
   slice(begin = 0, end) {
     if (end === undefined) end = this.length;
+    else end = Math.min(end, this.length);
     const res = [];
     for (let i = begin; i < end; i++)
       res.push(this.get(i));
