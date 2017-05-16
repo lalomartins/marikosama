@@ -36,7 +36,7 @@ class MongooseSchemaImplementation {
   // XXX these names are totally inconsistent
   getPaths(schema) {
     const paths = Object.getOwnPropertyNames(schema.paths);
-    return paths.map((path) => ({path, pathSchema: schema.paths[name]}));
+    return paths.map((path) => ({path, pathSchema: schema.paths[path]}));
   }
 
   eachPath = (schema, fn) => schema.eachPath(fn)
@@ -108,6 +108,42 @@ class MongooseSchemaImplementation {
       if (options.throw) throw error;
       else return error;
     }
+  }
+
+  create(subpath, schema, basePath) {
+    if (schema === undefined) {
+      schema = subpath;
+      subpath = undefined;
+      basePath = undefined;
+    }
+    if (subpath) {
+      schema = this.getPathSchema(subpath, schema, basePath);
+    } else if (basePath) {
+      schema = this.getPathSchema(basePath, schema);
+    }
+    if (schema.schema) schema = schema.schema;
+
+    const object = {};
+    for (const {path, pathSchema} of this.getPaths(schema)) {
+      const parts = path.split(`.`);
+      const tail = parts.pop();
+      let partial = object;
+      for (const part of parts) {
+        if (partial[part] === undefined) partial[part] = {};
+        partial = partial[part];
+      }
+
+      // const defaultValue = pathSchema.getDefault();
+      // if (!pathSchema.doValidateSync(defaultValue)) {
+      //   partial[tail] = defaultValue;
+      // } else {
+      //   // here it gets complicated
+      //   partial[tail] = `foo`;
+      // }
+      partial[tail] = pathSchema.getDefault();
+    }
+
+    return object;
   }
 
   test = (schema) => schema instanceof Schema

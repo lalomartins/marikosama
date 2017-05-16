@@ -266,6 +266,17 @@ export class BaseM extends EventEmitter {
   }
 
   /////////////////////////////////////////////////////////////////////////////
+  // creating data
+
+  createSubObject(path) {
+    return this.constructor.schemaImplementation.create(path, this.constructor.schema, this.basePath);
+  }
+
+  static create() {
+    return this.schemaImplementation.create(this.schema);
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
   // validation
 
   // TODO this is the mongoose implementation, decouple

@@ -2,8 +2,8 @@
 //    "babel-plugin-transform-decorators-legacy": "^1.3.0"
 import * as marikosama from 'marikosama';
 import featureRegistry from './feature-registry';
-import {Schema} from 'marikosama/schemas/mongoose';
-import 'marikosama/proxying';
+import {Schema} from 'marikosama/m/schemas/mongoose';
+import 'marikosama/m/proxying';
 import {model} from 'marikosama';
 
 const onlinePresenceSchema = new Schema({
@@ -40,7 +40,7 @@ const kittySchema = new Schema({
         fourth: {
           name: String,
           fifth: {
-            name: String,
+            name: {type: String, default: `Привет`},
           },
         },
       },
