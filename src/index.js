@@ -301,7 +301,7 @@ export class BaseM extends EventEmitter {
     if (schema) {
       const errors = [];
       // not eachPath() so that we can return partway
-      for (const {path, pathSchema} of schemaImplementation.getPaths()) {
+      for (const {path, pathSchema} of schemaImplementation.getPaths(schema)) {
         const error = schemaImplementation.validatePathSync(this, {...options, path, pathSchema});
         if (error) {
           if (options.collect) errors.push([path, error]);
