@@ -54,6 +54,12 @@ const implementation = {
         if (validate) link.validate();
         return link;
       },
+
+      linkAll(paths, validate) {
+        const links = {};
+        for (const path of paths) links[path] = this.deepLink(path, validate);
+        return links;
+      }
     });
   },
 
