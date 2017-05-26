@@ -145,7 +145,11 @@ export class BaseM extends EventEmitter {
   getData(options = {}) {
     // Maybe we need something more sophisticated? For now just trust user code
     // not to mutate it
-    if (this.constructor.options.accessors) {
+    if (this.basePath) {
+      let path = this.basePath;
+      if (path[path.length - 1] === `.`) path = path.substr(0, path.length - 1);
+      return this.rootM().deepGet(path);
+    } else if (this.constructor.options.accessors) {
       return this[symbols.modelData];
     } else {
       return this.subject;
@@ -241,11 +245,10 @@ export class BaseM extends EventEmitter {
     // TODO validate
     const [parent, current, lastIdentifier] = this._deepGetMinusOne(path);
     if (value != null) {
-      while (value.hasOwnProperty(symbols.proxySelf)) value = value[symbols.proxySelf];
-      if (value.m && value.m instanceof BaseM) value = value.toJSON();
+      if (value.m && value.m instanceof BaseM) value = value.m.getData();
     }
     if (current !== value) {
-      if (current !== undefined && current.update) current.update(value);
+      if (current != null && current.update) current.update(value);
       else if (parent.deepSet) parent.deepSet(lastIdentifier, value);
       else if (typeof lastIdentifier === `string` || typeof lastIdentifier === `number`) parent[lastIdentifier] = value;
       else throw makeDeepGetError(path, lastIdentifier);
