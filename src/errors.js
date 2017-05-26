@@ -34,6 +34,21 @@ export const CompoundValidationError = subclassError(
   }
 );
 
+export function flattenErrors(errors) {
+  if (!errors) return [];
+  else if (errors[Symbol.iterator]) return errors;
+  else if (errors.flatten) return errors.flatten();
+  else return [errors];
+}
+
+export function errorsMap(errors) {
+  const res = new Map();
+  for (const error of flattenErrors(errors))
+    if (error.path && !res.has(error.path))
+      res.set(error.path, error);
+  return res;
+}
+
 export function makeDeepGetError(basePath, path) {
   let message;
   if (path instanceof Error) {
