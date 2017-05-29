@@ -37,6 +37,13 @@ export class ChangeLog {
     return this.changes[this.changes.length - offset];
   }
 
+  latestId(offset = 1) {
+    const revision = this.latest(offset);
+    if (revision) return revision.id;
+    else if (offset === 1) return 0;
+    else return undefined;
+  }
+
   // Important: this returns whether or not there was at least one change, not
   // whether it *is* changed since then.
   changedSince(since, path) {
@@ -59,7 +66,6 @@ export class ChangeLog {
   }
 
   add(change) {
-    console.debug(`adding change:`, change);
     if (!Array.isArray(change.path))
       change = {path: [change.path], value: [change.value], current: [change.current]};
     this.changes.push({...change, id: this.nextId++});
