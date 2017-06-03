@@ -102,6 +102,10 @@ export class ArrayProxyBase {
     return res;
   }
 
+  join(joiner) {
+    return this.toArray().join(joiner);
+  }
+
   // TODO all Array methods pop, slice, etc
 }
 
