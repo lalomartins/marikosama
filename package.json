@@ -1,6 +1,6 @@
 {
   "name": "marikosama",
-  "version": "0.0.5-dev",
+  "version": "0.0.5",
   "description": "A model system for db-centric webapps",
   "main": "index.js",
   "scripts": {
