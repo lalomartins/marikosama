@@ -19,6 +19,22 @@ export class ChangeLog {
     }
   }
 
+  get(id) {
+    for (const change of this.changes) {
+      if (change.id === id) return change;
+    }
+  }
+
+  previous(id) {
+    let previous;
+    for (const change of this.changes) {
+      if (change.id === id)
+        return previous;
+      else
+        previous = change;
+    }
+  }
+
   clear(before) {
     if (before === undefined) this.changes = [];
     else if (before < 0) {
