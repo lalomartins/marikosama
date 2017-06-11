@@ -83,7 +83,12 @@ export class ChangeLog {
 
   add(change) {
     if (!Array.isArray(change.path))
-      change = {path: [change.path], value: [change.value], current: [change.current]};
+    change = {
+      path: [change.path],
+      value: [change.value],
+      current: [change.current],
+      timestamp: [change.timestamp || Date.now()]
+    };
     this.changes.push({...change, id: this.nextId++});
   }
 }
