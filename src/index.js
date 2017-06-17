@@ -133,6 +133,7 @@ export class BaseM extends EventEmitter {
 
   static load(data, options = {}) {
     const instance = new this.subjectClass();
+    instance.m.update(this.schemaImplementation.create(this.schema), {noEmit: true});
     instance.m.update(data, {noEmit: true});
     if (instance.m.initialize && this.options.initialize)
       instance.m.initialize();
@@ -291,7 +292,7 @@ export class BaseM extends EventEmitter {
   }
 
   static create() {
-    return this.load(this.schemaImplementation.create(this.schema));
+    return this.load({});
   }
 
   /////////////////////////////////////////////////////////////////////////////
