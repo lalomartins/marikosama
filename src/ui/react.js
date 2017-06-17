@@ -26,9 +26,11 @@ export class Watch extends Component {
     const events = props.events || [`update`];
     for (const event of events) {
       let emitters = props[event] || [];
-      if (!Array.isArray(emitters)) emitters = [emitters];
-      for (const emitter of emitters)
+      if (!emitters[Symbol.iterator]) emitters = [emitters];
+      for (let emitter of emitters) {
+        if (emitter.m) emitter = emitter.m;
         emitter.on(event, ::this.wrappedForceUpdate);
+      }
     }
   }
 
@@ -36,14 +38,17 @@ export class Watch extends Component {
     const events = props.events || [`update`];
     for (const event of events) {
       let emitters = props[event] || [];
-      if (!Array.isArray(emitters)) emitters = [emitters];
-      for (const emitter of emitters)
+      if (!emitters[Symbol.iterator]) emitters = [emitters];
+      for (let emitter of emitters) {
+        if (emitter.m) emitter = emitter.m;
         emitter.removeListener(event, ::this.wrappedForceUpdate);
+      }
     }
   }
 
   render() {
-    return this.props.children;
+    const getProps = this.props.getProps || (() => ({watchNonce: Date.now()}));
+    return React.cloneElement(this.props.children, getProps(this.props));
   }
 }
 
@@ -131,12 +136,13 @@ class ModelManagerBase extends Component {
   }
 
   componentWillMount() {
+    const sharedState = {};
     const stateUpdate = {};
     for (const name of Object.getOwnPropertyNames(this.constructor.providers)) {
       const provider = this.constructor.providers[name];
       const cache = this.cache.get(name);
       if (provider.initializeSync) {
-        cache.object = provider.initializeSync(this.props);
+        cache.object = provider.initializeSync(this.props, name, sharedState);
         cache.lastRevision = cache.object.m.changeLog.latest().id;
       }
       if (cache.object && cache.object.m && cache.object.m.on)
@@ -153,7 +159,8 @@ class ModelManagerBase extends Component {
       else if (cache.object.on)
         cache.object.on(`update`, cache.handler);
       if (provider.initialize)
-        provider.initialize(this.props).then((object) => this.replace(name, object));
+        provider.initialize(this.props, name, sharedState)
+        .then((object) => this.replace(name, object));
     }
   }
 
@@ -171,13 +178,14 @@ class ModelManagerBase extends Component {
   }
 
   componentWillReceiveProps(nextProps) {
+    const sharedState = {};
     const stateUpdate = {};
     const needHandlers = [];
     for (const name of Object.getOwnPropertyNames(this.constructor.providers)) {
       const provider = this.constructor.providers[name];
       const cache = this.cache.get(name);
       if (provider.updateSync) {
-        const providerUpdate = provider.updateSync(this.props, nextProps);
+        const providerUpdate = provider.updateSync(this.props, nextProps, name, sharedState);
         if (providerUpdate && providerUpdate.update) {
           if (cache.object && cache.object.m && cache.object.m.on)
             cache.object.m.removeListener(`update`, cache.handler);
@@ -200,7 +208,8 @@ class ModelManagerBase extends Component {
     for (const name of Object.getOwnPropertyNames(this.constructor.providers)) {
       const provider = this.constructor.providers[name];
       if (provider.update)
-        provider.update(this.props, nextProps).then((providerUpdate) => {
+        provider.update(this.props, nextProps, name, sharedState)
+        .then((providerUpdate) => {
           if (providerUpdate && providerUpdate.update)
             this.replace(name, providerUpdate.object);
         });
