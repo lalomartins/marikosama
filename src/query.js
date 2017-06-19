@@ -3,7 +3,7 @@ import {EventEmitter} from 'events';
 import symbols from './symbols';
 import featureRegistry from './feature-registry';
 
-class QueryM extends EventEmitter {
+export class QueryM extends EventEmitter {
   constructor(queryResults) {
     super();
     this.queryResults = queryResults;
