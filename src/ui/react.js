@@ -61,6 +61,16 @@ export function modelConsumer(providers) {
   };
 }
 
+function lastRevisionId(object) {
+  const revision = object &&
+    object.m &&
+    object.m.changeLog &&
+    object.m.changeLog.latest &&
+    object.m.changeLog.latest();
+  if (revision) return revision.id;
+  else return 0;
+}
+
 class ModelManagerBase extends Component {
   constructor(props) {
     super(props);
@@ -102,9 +112,8 @@ class ModelManagerBase extends Component {
         this.constructor.providers[name].dispose(oldCache.object);
       }
     }
-    const lastRevision = object.m && object.m.changeLog && object.m.changeLog.latest();
     const newCache = {
-      lastRevision: lastRevision ? lastRevision.id : 0,
+      lastRevision: lastRevisionId(object),
       object,
       handler: oldCache.handler,
     };
@@ -124,8 +133,8 @@ class ModelManagerBase extends Component {
     const cache = this.cache.get(name);
     // Sanity check / debounce
     if (cache.object && cache.object.m && cache.object.m.changeLog) {
-      if (cache.object.m.changeLog.latest().id > cache.lastRevision) {
-        cache.lastRevision = cache.object.m.changeLog.latest().id;
+      if (lastRevisionId(cache.object) > cache.lastRevision) {
+        cache.lastRevision = lastRevisionId(cache.object);
         this.setState({[name]: this.makeProxy(cache.object, cache)});
       }
     } else {
@@ -143,7 +152,7 @@ class ModelManagerBase extends Component {
       const cache = this.cache.get(name);
       if (provider.initializeSync) {
         cache.object = provider.initializeSync(this.props, name, sharedState);
-        cache.lastRevision = cache.object.m.changeLog.latest().id;
+        cache.lastRevision = lastRevisionId(cache.object);
       }
       if (cache.object && cache.object.m && cache.object.m.on)
         stateUpdate[name] = this.makeProxy(cache.object, cache);
@@ -190,7 +199,7 @@ class ModelManagerBase extends Component {
           if (cache.object && cache.object.m && cache.object.m.on)
             cache.object.m.removeListener(`update`, cache.handler);
           cache.object = providerUpdate.object;
-          cache.lastRevision = cache.object.m.changeLog.latest().id;
+          cache.lastRevision = lastRevisionId(cache.object);
           if (cache.object && cache.object.m && cache.object.m.on) {
             stateUpdate[name] = this.makeProxy(cache.object, cache);
             needHandlers.push([cache.object.m, cache.handler]);
