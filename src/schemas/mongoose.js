@@ -69,14 +69,15 @@ class MongooseSchemaImplementation {
       const checking = missing;
       missing = [];
       while (checking.length) {
-        missing.unshift(checking.pop());
         // XXX not sure how mongoose `paths` works with spaces etc, check
         const candidatePath = checking.join(`.`);
         if (currentSchema.paths[candidatePath]) {
           currentSchema = currentSchema.paths[candidatePath];
           if (currentSchema.schema) currentSchema = currentSchema.schema;
-          continue outer;
+          if (missing.length) continue outer;
+          else return currentSchema;
         }
+        missing.unshift(checking.pop());
       }
       // nothing found
       return undefined;
