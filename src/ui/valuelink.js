@@ -13,7 +13,7 @@ class MarikoLink extends Link {
   }
 
   get value() {
-    return this.m.deepGet(this.path);
+    return this.m.deepGetMaybe(this.path);
   }
 
   set value(value) {
