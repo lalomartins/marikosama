@@ -237,7 +237,8 @@ export class BaseM extends EventEmitter {
     try {
       return this.deepGet(path, parent);
     } catch (error) {
-      if (error.fullPath === path) return undefined;
+      if (error.fullPath === `${this.basePath || ``}${path}`)
+        return undefined;
       else throw error;
     }
   }
