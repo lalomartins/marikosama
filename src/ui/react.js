@@ -194,7 +194,7 @@ class ModelManagerBase extends Component {
       const provider = this.constructor.providers[name];
       const cache = this.cache.get(name);
       if (provider.updateSync) {
-        const providerUpdate = provider.updateSync(this.props, nextProps, name, sharedState);
+        const providerUpdate = provider.updateSync({props: this.props, nextProps, name, sharedState, cache});
         if (providerUpdate && providerUpdate.update) {
           if (cache.object && cache.object.m && cache.object.m.on)
             cache.object.m.removeListener(`update`, cache.handler);
@@ -217,7 +217,7 @@ class ModelManagerBase extends Component {
     for (const name of Object.getOwnPropertyNames(this.constructor.providers)) {
       const provider = this.constructor.providers[name];
       if (provider.update)
-        provider.update(this.props, nextProps, name, sharedState)
+        provider.update({props: this.props, nextProps, name, sharedState, cache: this.cache.get(name)})
         .then((providerUpdate) => {
           if (providerUpdate && providerUpdate.update)
             this.replace(name, providerUpdate.object);
