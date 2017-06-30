@@ -55,7 +55,8 @@ export class ArrayProxyBase {
 
   map(fn) {
     const results = [];
-    for (const proxy of this) results.push(fn(proxy));
+    let i = 0;
+    for (const proxy of this) results.push(fn(proxy, i++, this));
     return results;
   }
 
