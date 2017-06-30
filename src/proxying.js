@@ -107,6 +107,15 @@ export class ArrayProxyBase {
     return res;
   }
 
+  splice(start, deleteCount, ...add) {
+    const self = this[symbols.proxySelf].m.deepGet(this.basePath);
+    const current = self.slice();
+    this[symbols.proxySelf].m.deepGet(this.basePath).splice(start, deleteCount, ...add);
+    // There's no noEmit because the signature is variadic.
+    // However, it would be easy enough to just use x.deepGet(path).slice() instead.
+    this[symbols.proxySelf].m.emit(`update`, (this.basePath), self, current);
+  }
+
   join(joiner) {
     return this.toArray().join(joiner);
   }
@@ -115,7 +124,7 @@ export class ArrayProxyBase {
     return this.toArray().includes(value);
   }
 
-  // TODO all Array methods pop, slice, etc
+  // TODO all Array methods
 }
 
 function proxyArrayProxy(proxy) {
