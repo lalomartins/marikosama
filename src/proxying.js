@@ -124,6 +124,10 @@ export class ArrayProxyBase {
     return this.toArray().includes(value);
   }
 
+  indexOf(value) {
+    return this.toArray().indexOf(value);
+  }
+
   // TODO all Array methods
 }
 
