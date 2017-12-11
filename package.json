@@ -2,12 +2,11 @@
   "name": "marikosama",
   "version": "0.0.6-dev",
   "description": "A model system for db-centric webapps",
-  "main": "index.js",
+  "main": "m/index.js",
   "scripts": {
     "build": "./node_modules/.bin/babel -d m src",
     "prepare": "npm run build"
   },
-  "main": "m/index.js",
   "keywords": [
     "model",
     "mvc",
@@ -20,7 +19,8 @@
   "author": "Lalo Martins <lalo.martins@gmail.com>",
   "license": "MIT",
   "dependencies": {
-    "babel-polyfill": "^6.23.0"
+    "babel-polyfill": "^6.23.0",
+    "json-schema-library": "^3.3.2"
   },
   "devDependencies": {
     "babel-cli": "^6.24.1",

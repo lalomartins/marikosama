@@ -161,6 +161,7 @@ export class BaseM extends EventEmitter {
     const M = this.constructor;
     const updates = {path: [], value: [], current: []};
     M.schemaImplementation.eachPath(M.schema, (path, pathSchema) => {
+      if (!path) return;
       const value = this.deepGetMaybe(path, data);
       if (value !== undefined) {
         const update = this.deepSetWithParents(path, value, {noEmit: true});

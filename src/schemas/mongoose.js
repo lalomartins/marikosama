@@ -1,5 +1,6 @@
 import featureRegistry from '../feature-registry';
 import Schema from 'mongoose/lib/schema';
+import CompoundValidationError from '../errors';
 
 // we could potentially subclass it
 export {Schema};
@@ -30,8 +31,8 @@ function _validateArraySync(m, array, pathSchema, options) {
 }
 
 
-// LATER: the API is pretty tightly based on Mongoose. When we have another
-// implementation, some redesign will probably be in order.
+// XXX: the API is pretty tightly based on Mongoose. As the JSON Schema
+// implementation is currently WIP, the API is likely to be in flux
 class MongooseSchemaImplementation {
   // XXX these names are totally inconsistent
   getPaths(schema) {
@@ -147,7 +148,9 @@ class MongooseSchemaImplementation {
     return object;
   }
 
-  test = (schema) => schema instanceof Schema
+  test(schema) {
+    return schema instanceof Schema;
+  }
 }
 
 

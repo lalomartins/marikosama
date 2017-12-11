@@ -167,10 +167,11 @@ export function createAccessors(M, subjectClass, schema) {
   };
 
   const proxies = M[symbols.nestedProxies] = new Map();
-  schema.eachPath((path, schemaPath) => {
+  M.schemaImplementation.eachPath(schema, (path, schemaPath) => {
+    if (!path) return; // don't need proxies for the root path
     const parts = path.split(`.`);
     const head = parts.shift();
-    if (!proxies.has(head) && subjectClass.prototype[head] !== undefined) return;
+    if (!proxies.has(head) && subjectClass.prototype.hasOwnProperty(head)) return;
     if (parts.length) {
       const tail = parts.pop();
       if (!proxies.has(head)) {
@@ -254,9 +255,9 @@ export function createAccessors(M, subjectClass, schema) {
         },
         set: basicSetter(path),
       });
-    } else if (schemaPath.$isSingleNested) {
+    } else if (schemaPath.$isSingleNested || schemaPath.type === `object`) {
       class NestedProxy extends NestedProxyBase {}
-      createAccessors(M, NestedProxy, schemaPath.schema);
+      createAccessors(M, NestedProxy, schemaPath.schema || schemaPath);
       Object.defineProperty(subjectClass.prototype, path, {
         get() {
           const proxy = new NestedProxy(this, path);
