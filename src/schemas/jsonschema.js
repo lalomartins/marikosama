@@ -4,6 +4,23 @@ import jsonschema from 'json-schema-library';
 export const Schema = jsonschema.cores.Draft04;
 export default Schema;
 
+const uuidV4Regex = /^[A-F\d]{8}-[A-F\d]{4}-4[A-F\d]{3}-[89AB][A-F\d]{3}-[A-F\d]{12}$/i;
+function uuidV4Error(data) {
+  return {
+    type: `error`,
+    name: `FormatUUIDv4Error`,
+    code: `format-uuid-v4-error`,
+    message: `Value ${data.value} at ${data.pointer} is not a valid UUID v4`,
+    data,
+  };
+}
+export function extend(schema) {
+  jsonschema.addValidator.format(schema, `uuidv4`, (core, schema, value, pointer) => {
+    if (value && !uuidV4Regex.test(value)) {
+      return uuidV4Error({value, pointer});
+    }
+  });
+}
 
 // XXX: the API is pretty tightly based on Mongoose. As the JSON Schema
 // implementation is currently WIP, the API is likely to be in flux
