@@ -20,6 +20,7 @@ export function extend(schema) {
       return uuidV4Error({value, pointer});
     }
   });
+  return schema;
 }
 
 // XXX: the API is pretty tightly based on Mongoose. As the JSON Schema
@@ -53,7 +54,10 @@ class JSONSchemaImplementation {
   }
 
   getPathSchema(path, schema, basePath) {
-    //
+    const jsPath = (basePath || ``).split(`.`)
+    .concat((path || ``).split(`.`))
+    .join(`/`);
+    return extend(new Schema(schema.getSchema(schema.__rootSchema, undefined, `#${jsPath}`)));
   }
 
   validatePathSync(m, options) {
@@ -70,6 +74,7 @@ class JSONSchemaImplementation {
       subpath = undefined;
       basePath = undefined;
     }
+    const core = schema;
     if (subpath) {
       schema = this.getPathSchema(subpath, schema, basePath);
     } else if (basePath) {
@@ -77,7 +82,7 @@ class JSONSchemaImplementation {
     }
     if (schema.schema instanceof jsonschema.cores.Interface) schema = schema.schema;
 
-    return schema.getTemplate(schema.rootSchema);
+    return core.getTemplate(schema.rootSchema);
   }
 
   test(schema) {

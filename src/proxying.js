@@ -233,11 +233,15 @@ export function createAccessors(M, subjectClass, schema) {
             this[symbols.proxySelf].m.deepSet(`${partial}.${tail}`, value);
         },
       });
-    } else if (schemaPath.$isMongooseDocumentArray || schemaPath.instance === `Array`) {
+    } else if (schemaPath.$isMongooseDocumentArray || schemaPath.instance === `Array` || schemaPath.type === `array`) {
       class ArrayProxy extends ArrayProxyBase {}
       if (schemaPath.$isMongooseDocumentArray) {
         class NestedProxy extends NestedProxyBase {}
         createAccessors(M, NestedProxy, schemaPath.schema);
+        ArrayProxy.itemClass = NestedProxy;
+      } else if (schemaPath.items && schemaPath.items.type === `object` && schemaPath.items.properties) {
+        class NestedProxy extends NestedProxyBase {}
+        createAccessors(M, NestedProxy, schemaPath.items);
         ArrayProxy.itemClass = NestedProxy;
       }
       Object.defineProperty(subjectClass.prototype, path, {
