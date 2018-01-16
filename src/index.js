@@ -277,20 +277,23 @@ export class BaseM extends EventEmitter {
   /////////////////////////////////////////////////////////////////////////////
   // creating data
 
-  createSubObject(path) {
+  createSubObject(path, wrap) {
     const M = this.constructor;
+    if (wrap === undefined) wrap = M.options.accessors;
     const fullPath = (this.basePath || ``) + path;
-    if (!M[symbols.subObjectClasses][fullPath]) {
-      const subSchema = M.schemaImplementation.getPathSchema(path, M.schema, this.basePath);
-      const theClass = M[symbols.subObjectClasses][fullPath] = class SubObject {};
-      model({
-        schema: subSchema.schema ? subSchema.schema : subSchema,
-        options: M.options,
-      })(theClass);
-      theClass.M.parentM = M;
-    }
     const object = M.schemaImplementation.create(path, M.schema, this.basePath);
-    return M[symbols.subObjectClasses][fullPath].M.load(object);
+    if (wrap) {
+      if (!M[symbols.subObjectClasses][fullPath]) {
+        const subSchema = M.schemaImplementation.getPathSchema(path, M.schema, this.basePath);
+        const theClass = M[symbols.subObjectClasses][fullPath] = class SubObject {};
+        model({
+          schema: subSchema.schema ? subSchema.schema : subSchema,
+          options: M.options,
+        })(theClass);
+        theClass.M.parentM = M;
+      }
+      return M[symbols.subObjectClasses][fullPath].M.load(object);
+    } else return object;
   }
 
   static create() {

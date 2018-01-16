@@ -82,7 +82,10 @@ class JSONSchemaImplementation {
     }
     if (schema.schema instanceof jsonschema.cores.Interface) schema = schema.schema;
 
-    return core.getTemplate(schema.rootSchema);
+    if (schema.rootSchema.type === `array`)
+      return core.getTemplate(schema.rootSchema.items);
+    else
+      return core.getTemplate(schema.rootSchema);
   }
 
   test(schema) {
