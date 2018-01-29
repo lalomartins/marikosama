@@ -1,5 +1,7 @@
-import featureRegistry from '../feature-registry';
 import jsonschema from 'json-schema-library';
+
+import featureRegistry from '../feature-registry';
+import CompoundValidationError from '../errors';
 
 export const Schema = jsonschema.cores.Draft04;
 export default Schema;
@@ -28,7 +30,7 @@ export function extend(schema) {
 class JSONSchemaImplementation {
   getPaths(schema) {
     const paths = [];
-    this.eachPath(schema, ::paths.push);
+    this.eachPath(schema, (path, pathSchema) => {paths.push({path, pathSchema})});
     paths.shift();
     return paths;
   }
@@ -61,7 +63,26 @@ class JSONSchemaImplementation {
   }
 
   validatePathSync(m, options) {
-    const error = new Error(`not implemented`);
+    const path = options.path;
+    const schema = options.schema || m.constructor.schema;
+    const core = schema;
+    let pathSchema = options.pathSchema ||
+      m.constructor.schemaImplementation.getPathSchema(path, schema, m.basePath);
+    if (!pathSchema) {
+      const error = new Error(`path ${path} not found in schema`);
+      error.path = path;
+      if (options.throw) throw error;
+      else return error;
+    }
+    if (pathSchema.__rootSchema) pathSchema = pathSchema.__rootSchema;
+    const item = m.deepGetMaybe(path, options.object);
+    let error;
+    const errors = core.validate(pathSchema, item);
+    if (errors.length === 1) {
+      error = errors[0];
+    } else if (errors.length > 1) {
+      error = new CompoundValidationError(errors);
+    }
     if (error) {
       if (options.throw) throw error;
       else return error;
